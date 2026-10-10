@@ -102,6 +102,16 @@
         <div id="tab-pos" class="tab-content h-full flex flex-col lg:flex-row">
             <!-- Left: Product Catalog -->
             <div class="flex-1 flex flex-col h-full bg-slate-50 overflow-hidden p-2.5 sm:p-4">
+                <!-- Identitas transaksi untuk laporan AE -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3 shrink-0">
+                    <input id="pos-resto" type="text" placeholder="Nama/kode resto" aria-label="Nama atau kode resto" class="min-w-0 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-brand-500">
+                    <select id="pos-brand" aria-label="Brand" class="min-w-0 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-brand-500">
+                        <option value="LAZATTO">LAZATTO</option><option value="NGEUMI">NGEUMI</option>
+                    </select>
+                    <select id="pos-sales-source" aria-label="Sumber omset" class="min-w-0 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-brand-500">
+                        <option value="Reguler">Omset Reguler</option><option value="Event">Omset Event</option><option value="Satelit">Omset Satelit</option>
+                    </select>
+                </div>
                 <!-- Search & Filter Bar (Compact & Connected) -->
                 <div class="flex items-center gap-2 mb-3 shrink-0 overflow-x-auto pb-1">
                     <div class="relative w-40 sm:w-48 shrink-0">
@@ -744,6 +754,11 @@
         let activeReceiptData = null;
         let currentUserRole = localStorage.getItem('pos_user_role') || 'kasir'; 
         let currentCashierName = localStorage.getItem('pos_cashier_name') || 'Kasir 1';
+        let currentPosResto = localStorage.getItem('pos_resto') || '';
+        let currentPosBrand = localStorage.getItem('pos_brand') || 'LAZATTO';
+        let currentPosSalesSource = localStorage.getItem('pos_sales_source') || 'Reguler';
+        let currentShiftId = localStorage.getItem('pos_shift_id') || '';
+
         
         let printerSettings = JSON.parse(localStorage.getItem('pos_printer_settings')) || {
             paperSize: '80mm',
@@ -757,6 +772,10 @@
             }
             updateDateDisplay();
             updateRoleUI();
+            const restoInput=document.getElementById('pos-resto'), brandSelect=document.getElementById('pos-brand'), sourceSelect=document.getElementById('pos-sales-source');
+            if(restoInput) { restoInput.value=currentPosResto; restoInput.addEventListener('change',()=>{currentPosResto=restoInput.value.trim();localStorage.setItem('pos_resto',currentPosResto);}); }
+            if(brandSelect) { brandSelect.value=currentPosBrand; brandSelect.addEventListener('change',()=>{currentPosBrand=brandSelect.value;localStorage.setItem('pos_brand',currentPosBrand);renderProducts();}); }
+            if(sourceSelect) { sourceSelect.value=currentPosSalesSource; sourceSelect.addEventListener('change',()=>{currentPosSalesSource=sourceSelect.value;localStorage.setItem('pos_sales_source',currentPosSalesSource);}); }
             renderProducts();
             renderCart();
             updateDashboardStats();
@@ -785,15 +804,8 @@
             }
 
             try {
-                const response = await fetch(GAS_WEB_APP_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: "getProducts" })
-                });
-
-                // Since Google Apps Script returns with no-cors or redirect, we pull products from sheet if fetched successfully via GET or fallback
-                const getRes = await fetch(GAS_WEB_APP_URL);
+                // Endpoint GET mengembalikan JSON produk dari Spreadsheet.
+                const getRes = await fetch(GAS_WEB_APP_URL + '?action=getProducts', {cache:'no-store'});
                 const data = await getRes.json();
                 
                 if (data && data.products && data.products.length > 0) {
@@ -814,30 +826,31 @@
             }
         }
 
+        async function posApiRequest(payload) {
+            const response = await fetch(GAS_WEB_APP_URL, {
+                method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+                cache:'no-store', body:JSON.stringify(payload)
+            });
+            const raw=await response.text(); let data;
+            try { data=JSON.parse(raw); } catch(e) { throw new Error('Respons GAS tidak valid.'); }
+            if(!response.ok || data.status==='error') throw new Error(data.message||'Permintaan POS gagal.');
+            return data;
+        }
         async function sendTransactionToSheet(txData) {
             try {
-                await fetch(GAS_WEB_APP_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: "saveTransaction", transaction: txData })
-                });
+                const result=await posApiRequest({action:'saveTransaction',transaction:txData});
+                const indicator=document.getElementById('sync-status-text');
+                if(indicator) indicator.innerHTML='<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1"></span> Transaksi tersimpan';
+                return result;
             } catch (err) {
-                console.error("Failed to send transaction to Spreadsheet", err);
+                console.error('Failed to send transaction to Spreadsheet',err);
+                alertUser('Transaksi tersimpan lokal, tetapi gagal disinkronkan ke server: '+err.message);
+                return {status:'error',message:err.message};
             }
         }
-
         async function sendProductToSheet(prodData) {
-            try {
-                await fetch(GAS_WEB_APP_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: "saveProduct", product: prodData })
-                });
-            } catch (err) {
-                console.error("Failed to sync product to Spreadsheet", err);
-            }
+            try { return await posApiRequest({action:'saveProduct',product:{...prodData,brand:prodData.brand||currentPosBrand}}); }
+            catch(err) { console.error('Failed to sync product to Spreadsheet',err); alertUser('Produk gagal disinkronkan ke server: '+err.message); return {status:'error',message:err.message}; }
         }
 
         // ================= DASHBOARD STATISTICS & CHARTS =================
@@ -955,19 +968,16 @@
         }
 
         // ================= SHIFT MANAGEMENT =================
-        function closeCurrentShift() {
-            if (confirm('Apakah Anda yakin ingin menutup shift saat ini? Semua rekap transaksi shift akan diarsipkan dan aplikasi akan kembali ke halaman login kasir baru.')) {
-                transactions = [];
-                cart = [];
-                currentCashierName = 'Kasir Baru';
-                currentUserRole = 'kasir';
-                saveToLocalStorage();
-                updateDashboardStats();
-                renderCart();
-                renderHistoryTable();
-                openAuthModal();
-                alertUser('Shift berhasil ditutup. Silakan login kembali untuk memulai shift baru.');
-            }
+        async function closeCurrentShift() {
+            if (!confirm('Tutup shift saat ini? Data transaksi akan diarsipkan di Google Sheets.')) return;
+            try {
+                const shift={id:currentShiftId||`SHIFT-${Date.now()}`,cashier:currentCashierName,resto:currentPosResto,brand:currentPosBrand};
+                const result=await posApiRequest({action:'closeShift',shift});
+                if(result.status!=='success') throw new Error(result.message||'Gagal menutup shift.');
+                transactions=[];cart=[];currentCashierName='Kasir Baru';currentUserRole='kasir';currentShiftId='';
+                localStorage.removeItem('pos_shift_id');saveToLocalStorage();updateDashboardStats();renderCart();renderHistoryTable();openAuthModal();
+                alertUser('Shift berhasil diarsipkan di server. Silakan login kembali.');
+            } catch(err) { alertUser('Shift belum dapat ditutup karena gagal tersimpan ke server: '+err.message); }
         }
 
         // ================= PRINTER & PAPER SETTINGS =================
@@ -1149,40 +1159,44 @@
             if (authModal) authModal.classList.add('hidden');
         }
 
-        function verifyLoginCredentials() {
+        async function verifyLoginCredentials() {
             const userIn = document.getElementById('auth-username-input');
             const passIn = document.getElementById('auth-password-input');
             const username = userIn ? userIn.value.trim() : '';
-            const password = passIn ? passIn.value.trim() : '';
+            const password = passIn ? passIn.value : '';
+            if (!username || !password) { alertUser('Username dan password wajib diisi.'); return; }
 
+            // Akun yang dibuat melalui Management Account AE diverifikasi di backend GAS.
+            try {
+                const result = await posApiRequest({action:'verifyPosLogin',username,password});
+                if (result.status === 'success' && result.user) {
+                    currentUserRole='kasir';
+                    currentCashierName=result.user.username;
+                    currentPosBrand=result.user.brand||'LAZATTO';
+                    currentPosResto=result.user.resto||currentPosResto;
+                    localStorage.setItem('pos_user_role',currentUserRole);
+                    localStorage.setItem('pos_cashier_name',currentCashierName);
+                    localStorage.setItem('pos_brand',currentPosBrand);
+                    localStorage.setItem('pos_resto',currentPosResto);
+                    const brand=document.getElementById('pos-brand'), resto=document.getElementById('pos-resto');
+                    if(brand)brand.value=currentPosBrand;if(resto)resto.value=currentPosResto;
+                    currentShiftId=`SHIFT-${Date.now()}-${currentCashierName.replace(/\W/g,'')}`;
+                    localStorage.setItem('pos_shift_id',currentShiftId);
+                    updateRoleUI();renderProducts();closeAuthModal();alertUser(`Login berhasil: ${currentCashierName} · ${currentPosBrand}`);
+                    return;
+                }
+            } catch (err) {
+                console.warn('Autentikasi akun POS server gagal:',err);
+            }
+
+            // Akun demo/pusat lama dipertahankan agar akses admin yang sudah ada tidak langsung terputus.
             if (username === 'admin' && password === 'admin123') {
-                currentUserRole = 'pusat';
-                saveToLocalStorage();
-                updateRoleUI();
-                closeAuthModal();
-                alertUser('Login User Pusat berhasil!');
-                return;
+                currentUserRole='pusat';currentCashierName='Admin Pusat';saveToLocalStorage();updateRoleUI();closeAuthModal();alertUser('Login User Pusat berhasil!');return;
             }
-
-            if (username === '1234') {
-                currentUserRole = 'pusat';
-                saveToLocalStorage();
-                updateRoleUI();
-                closeAuthModal();
-                alertUser('Login User Pusat berhasil!');
-                return;
+            if (username === '1234' && password === '1234') {
+                currentUserRole='pusat';currentCashierName='User Pusat';saveToLocalStorage();updateRoleUI();closeAuthModal();alertUser('Login User Pusat berhasil!');return;
             }
-
-            if (username.length > 0) {
-                currentUserRole = 'kasir';
-                currentCashierName = username.charAt(0).toUpperCase() + username.slice(1);
-                saveToLocalStorage();
-                updateRoleUI();
-                closeAuthModal();
-                alertUser(`Login kasir berhasil sebagai [${currentCashierName}]!`);
-            } else {
-                alertUser('Username atau PIN tidak boleh kosong! (Contoh kasir: kasir1, admin pusat: admin / 1234)');
-            }
+            alertUser('Login gagal. Periksa username/password atau pastikan akun POS telah dibuat oleh AE dan backend GAS sudah diperbarui.');
         }
 
         function switchTab(tabName) {
@@ -1217,7 +1231,8 @@
             const filtered = products.filter(p => {
                 const matchCat = currentCategory === 'All' || p.category === currentCategory;
                 const matchName = p.name.toLowerCase().includes(searchVal);
-                return matchCat && matchName;
+                const matchBrand = !p.brand || String(p.brand).toUpperCase() === String(currentPosBrand).toUpperCase();
+                return matchCat && matchName && matchBrand;
             });
 
             if (filtered.length === 0) {
@@ -1491,6 +1506,7 @@
             const txData = {
                 id: invoiceId,
                 date: now.toLocaleString('id-ID'),
+                dateISO: now.toISOString(),
                 cashier: currentCashierName,
                 items: [...cart],
                 subtotal: calc.subtotal,
@@ -1498,8 +1514,14 @@
                 total: calc.total,
                 paymentMethod: paymentMethod,
                 cashGiven: paymentMethod === 'Tunai' ? cashGiven : calc.total,
-                change: paymentMethod === 'Tunai' ? cashGiven - calc.total : 0
+                change: paymentMethod === 'Tunai' ? cashGiven - calc.total : 0,
+                resto: currentPosResto || '',
+                brand: currentPosBrand || 'LAZATTO',
+                salesSource: currentPosSalesSource || 'Reguler',
+                shiftId: currentShiftId || (currentShiftId = `SHIFT-${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}-${currentCashierName.replace(/\W/g,'')}`),
+                shiftStatus: 'OPEN'
             };
+            localStorage.setItem('pos_shift_id', currentShiftId);
 
             transactions.unshift(txData);
             activeReceiptData = txData;
@@ -1731,11 +1753,13 @@
             }
 
             if (confirm('Apakah Anda yakin ingin menghapus produk ini dari pusat?')) {
-                products = products.filter(p => p.id !== id);
-                saveToLocalStorage();
-                renderProducts();
-                renderInventoryTable();
-                updateDashboardStats();
+                (async()=>{
+                    try {
+                        await posApiRequest({action:'deleteProduct',productId:id});
+                        products = products.filter(p => p.id !== id);
+                        saveToLocalStorage();renderProducts();renderInventoryTable();updateDashboardStats();
+                    } catch(err) { alertUser('Produk gagal dihapus dari server: '+err.message); }
+                })();
             }
         }
 
