@@ -633,13 +633,13 @@
     <div id="receipt-print-area"></div>
 
     <!-- ================= MODAL PEMBAYARAN ================= -->
-    <div id="checkout-modal" class="fixed inset-0 z-[80] hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="checkout-title">
-      <div class="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
+    <div id="checkout-modal" class="fixed inset-0 z-[80] hidden items-start sm:items-center justify-center overflow-y-auto overscroll-contain bg-slate-950/60 backdrop-blur-sm p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="checkout-title">
+      <div class="my-auto w-full max-w-md max-h-[calc(100dvh-1.5rem)] flex flex-col rounded-2xl bg-white shadow-2xl overflow-hidden">
         <div class="bg-brand-600 text-white px-5 py-4 flex items-center justify-between">
           <div><h2 id="checkout-title" class="font-bold text-lg">Pembayaran</h2><p class="text-xs opacity-80">Pilih metode dan masukkan nominal uang</p></div>
           <button onclick="closeCheckoutModal()" class="text-white text-2xl leading-none cursor-pointer" aria-label="Tutup">&times;</button>
         </div>
-        <div class="p-5 space-y-4">
+        <div class="p-5 space-y-4 overflow-y-auto overscroll-contain min-h-0" style="-webkit-overflow-scrolling:touch;">
           <div class="rounded-xl bg-slate-50 border border-slate-200 p-4 flex justify-between items-center"><span class="text-sm text-slate-600">Total tagihan</span><strong id="checkout-total" class="text-xl text-brand-600 font-mono tabular-nums">Rp 0</strong></div>
           <div><label for="payment-method" class="block text-xs font-semibold text-slate-600 mb-1">Mode pembayaran</label>
             <select id="payment-method" onchange="updatePaymentFields()" class="w-full rounded-xl border border-slate-300 px-3 py-3 text-sm bg-white"><option value="CASH">Cash / Tunai</option><option value="QRIS">QRIS</option><option value="TRANSFER">Transfer</option><option value="DEBIT">Kartu Debit</option></select>
