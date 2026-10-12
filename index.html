@@ -88,6 +88,11 @@
             }
         }
         
+        /* Area struk hanya untuk proses cetak, jangan tampil di halaman kasir */
+        #receipt-print-area {
+            display: none !important;
+        }
+
         @media print {
             body * { visibility: hidden !important; }
             #receipt-print-area, #receipt-print-area * { visibility: visible !important; }
@@ -877,6 +882,7 @@
     let posProducts = [];
     let posCart = [];
     let posTransactions = [];
+    let currentShiftStartedAt = null;
     let lastCompletedTransaction = null;
     let activeCategory = 'All';
     let autoPrintEnabled = true;
@@ -1252,9 +1258,10 @@
     function getDailySalesData() {
         const rows = Array.isArray(posTransactions) ? posTransactions : [];
         const today = new Date().toLocaleDateString('id-ID');
+        const shiftStart = Number(currentShiftStartedAt) || 0;
         const todays = rows.filter(t => {
             const d = t.dateISO ? new Date(t.dateISO) : new Date(t.date || 0);
-            return !isNaN(d.getTime()) && d.toLocaleDateString('id-ID') === today;
+            return !isNaN(d.getTime()) && d.toLocaleDateString('id-ID') === today && d.getTime() >= shiftStart;
         });
 
         const menuTotals = {};
@@ -1439,21 +1446,36 @@
             printArea.innerHTML = `<div id="receipt-content" class="mx-auto w-[48mm] max-w-[48mm] bg-white text-black font-mono text-[10px] leading-snug"><pre class="whitespace-pre-wrap font-mono">${esc(buildPlainTextDailySalesRecap(data))}</pre></div>`;
         }
 
-        // Jika Bluetooth terhubung, cetak langsung via ESC/POS 58mm
+        // Utamakan cetak langsung ke printer Bluetooth 58mm.
+        // Jika belum terhubung, minta pengguna memilih printer dari dialog Bluetooth
+        // (harus dipicu dari klik pengguna oleh aturan keamanan browser).
+        if ((!btConnected || !btCharacteristic) && navigator.bluetooth) {
+            await connectBluetoothThermal58mm();
+        }
+
         if (btConnected && btCharacteristic) {
             try {
                 const bytes = buildEscPosDailySalesRecap(data, 4);
                 await sendEscPosToBluetooth(bytes, 20, 20);
-                notifyPOS('Rekap penjualan hari ini berhasil dicetak ke ' + (btDeviceName || 'Printer Bluetooth') + '!');
+                notifyPOS('Rekap penjualan hari ini berhasil dicetak langsung ke kertas 58mm melalui ' + (btDeviceName || 'Printer Bluetooth') + '.');
                 return;
             } catch(e) {
-                notifyPOS('Gagal mengirim ke Bluetooth: ' + e.message + '. Membuka dialog cetak browser...', true);
+                notifyPOS('Gagal mengirim rekap ke Bluetooth: ' + e.message + '. Membuka dialog cetak browser sebagai alternatif.', true);
             }
         }
 
-        // Buka dialog cetak browser jika belum Bluetooth
+        // Fallback: dialog cetak browser dengan ukuran kertas 58mm.
+        // Browser mungkin meminta konfirmasi cetak; cetak tanpa dialog tidak diizinkan
+        // oleh browser biasa kecuali melalui konfigurasi kiosk/driver khusus.
         setTimeout(() => window.print(), 100);
     }
+
+    // Setelah dialog cetak ditutup, bersihkan area cetak sementara.
+    // Area ini tetap tersembunyi di layar dan hanya ditampilkan oleh @media print.
+    window.addEventListener('afterprint', () => {
+        const printArea = document.getElementById('receipt-print-area');
+        if (printArea) printArea.innerHTML = '';
+    });
 
     // Modal Handlers
     function openPrinterModal() {
@@ -1596,7 +1618,11 @@
         try {
             localStorage.setItem(STORAGE_KEY_ACCOUNT, JSON.stringify(currentPOSAccount));
             posTransactions = JSON.parse(localStorage.getItem('pos_tx_' + currentPOSAccount.username) || '[]');
-        } catch(e) { posTransactions = []; }
+            // Setiap login setelah Tutup Shift memulai sesi penjualan baru dari nol.
+            const shiftKey = 'pos_shift_started_' + currentPOSAccount.username;
+            currentShiftStartedAt = Number(localStorage.getItem(shiftKey)) || Date.now();
+            localStorage.setItem(shiftKey, String(currentShiftStartedAt));
+        } catch(e) { posTransactions = []; currentShiftStartedAt = Date.now(); }
 
         document.getElementById('login-overlay').classList.add('hidden');
         setPOSBrand(currentPOSAccount.brand);
@@ -1614,20 +1640,33 @@
 
     // Tutup Shift (Satu-satunya cara keluar/logout)
     function logoutToLogin() {
+        const closingUser = currentPOSAccount?.username;
         try {
+            // Tutup sesi aktif dan hapus seluruh data sementara, tanpa menghapus riwayat transaksi.
             localStorage.removeItem(STORAGE_KEY_ACCOUNT);
-            if (currentPOSAccount) localStorage.removeItem('pos_cart_' + currentPOSAccount.username);
+            if (closingUser) {
+                localStorage.removeItem('pos_cart_' + closingUser);
+                localStorage.removeItem('pos_shift_started_' + closingUser);
+            }
             localStorage.setItem(STORAGE_KEY_TAB, 'pos');
         } catch(e) {}
         currentPOSAccount = null;
+        currentShiftStartedAt = null;
         posCart = [];
         posProducts = [];
+        pendingCheckout = null;
+        lastCompletedTransaction = null;
+        closeReceiptReview();
+        const checkoutModal = document.getElementById('checkout-modal');
+        if (checkoutModal) { checkoutModal.classList.add('hidden'); checkoutModal.classList.remove('flex'); }
+        const discountInput = document.getElementById('cart-discount-input');
+        if (discountInput) discountInput.value = '0';
+        renderPOSCart();
+        switchTab('pos');
         document.getElementById('login-overlay').classList.remove('hidden');
         document.getElementById('login-password').value = '';
         document.getElementById('login-username').value = '';
-        renderPOSCart();
-        switchTab('pos');
-        notifyPOS('Shift kasir telah ditutup.');
+        notifyPOS('Shift ditutup. Data sesi berikutnya akan mulai dari 0; riwayat transaksi tetap tersimpan.');
     }
 
     // Kategori mengikuti kategori yang disimpan pada halaman Inventaris Menu AE.
@@ -2073,9 +2112,10 @@
     function refreshDashboard() {
         const rows = Array.isArray(posTransactions) ? posTransactions : [];
         const today = new Date().toLocaleDateString('id-ID');
+        const shiftStart = Number(currentShiftStartedAt) || 0;
         const todays = rows.filter(t => {
             const d = t.dateISO ? new Date(t.dateISO) : new Date(t.date || 0);
-            return !isNaN(d.getTime()) && d.toLocaleDateString('id-ID') === today;
+            return !isNaN(d.getTime()) && d.toLocaleDateString('id-ID') === today && d.getTime() >= shiftStart;
         });
 
         const total = arr => arr.reduce((sum, t) => sum + (Number(t.total) || 0), 0);
