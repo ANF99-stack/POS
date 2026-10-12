@@ -37,9 +37,11 @@
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         @media print {
-            body * { visibility: hidden; }
-            #receipt-print-area, #receipt-print-area * { visibility: visible; }
-            #receipt-print-area { position: absolute; left: 0; top: 0; width: 100%; }
+            body * { visibility: hidden !important; }
+            #receipt-print-area, #receipt-print-area * { visibility: visible !important; }
+            #receipt-print-area { display:block !important; position:absolute; left:0; top:0; width:100%; padding:8px; color:#000; background:#fff; }
+            #receipt-content { margin:0 auto; }
+            @page { size: 80mm auto; margin: 3mm; }
         }
     </style>
 </head>
@@ -301,6 +303,17 @@
                     </div>
                 </div>
 
+                <!-- Printer & Receipt Review -->
+                <div class="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <h3 class="font-bold text-base text-slate-900 mb-1">Printer & Struk</h3>
+                    <p class="text-xs text-slate-500 mb-4">Hubungkan printer struk melalui dialog cetak browser, lalu tinjau struk terakhir sebelum mencetak.</p>
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <button onclick="connectReceiptPrinter()" class="px-4 py-2.5 rounded-xl bg-brand-600 text-white text-xs font-semibold hover:opacity-90"><i data-lucide="printer" class="inline w-4 h-4 mr-1"></i> Connect Printer</button>
+                        <button onclick="reviewReceipt()" class="px-4 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-50"><i data-lucide="receipt-text" class="inline w-4 h-4 mr-1"></i> Review Struk</button>
+                        <span id="printer-status" class="self-center text-xs text-slate-500">Printer belum dipilih</span>
+                    </div>
+                </div>
+
                 <!-- Shift Management Section -->
                 <div class="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                     <div class="flex items-center space-x-3">
@@ -362,6 +375,31 @@
                                 </tr></thead><tbody id="history-table-body"></tbody></table></div></div></div></div>
     </main>
     <div id="receipt-print-area"></div>
+    <div id="checkout-modal" class="fixed inset-0 z-[80] hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="checkout-title">
+      <div class="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
+        <div class="bg-brand-600 text-white px-5 py-4 flex items-center justify-between">
+          <div><h2 id="checkout-title" class="font-bold text-lg">Pembayaran</h2><p class="text-xs opacity-80">Pilih metode dan masukkan nominal uang</p></div>
+          <button onclick="closeCheckoutModal()" class="text-white text-2xl leading-none" aria-label="Tutup">&times;</button>
+        </div>
+        <div class="p-5 space-y-4">
+          <div class="rounded-xl bg-slate-50 border border-slate-200 p-4 flex justify-between items-center"><span class="text-sm text-slate-600">Total tagihan</span><strong id="checkout-total" class="text-xl text-brand-600">Rp 0</strong></div>
+          <div><label for="payment-method" class="block text-xs font-semibold text-slate-600 mb-1">Mode pembayaran</label>
+            <select id="payment-method" onchange="updatePaymentFields()" class="w-full rounded-xl border border-slate-300 px-3 py-3 text-sm"><option value="CASH">Cash / Tunai</option><option value="QRIS">QRIS</option><option value="TRANSFER">Transfer</option><option value="DEBIT">Kartu Debit</option></select>
+          </div>
+          <div id="cash-amount-wrap"><label for="cash-given" class="block text-xs font-semibold text-slate-600 mb-1">Nominal uang diterima (Rp)</label><input id="cash-given" type="number" min="0" step="500" inputmode="numeric" placeholder="Contoh: 50000" oninput="updateCashChange()" class="w-full rounded-xl border border-slate-300 px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+          <div class="rounded-xl bg-emerald-50 border border-emerald-100 p-3 flex justify-between items-center"><span class="text-sm text-emerald-800">Kembalian</span><strong id="cash-change" class="text-lg text-emerald-700">Rp 0</strong></div>
+          <p id="checkout-error" class="hidden text-xs text-rose-600"></p>
+          <div class="flex gap-2"><button onclick="closeCheckoutModal()" class="flex-1 rounded-xl border border-slate-300 py-3 text-sm font-semibold">Batal</button><button id="confirm-payment-btn" onclick="confirmPayment()" class="flex-1 rounded-xl bg-brand-600 text-white py-3 text-sm font-bold">Bayar</button></div>
+        </div>
+      </div>
+    </div>
+    <div id="receipt-review-modal" class="fixed inset-0 z-[85] hidden items-center justify-center bg-slate-950/60 p-3" role="dialog" aria-modal="true">
+      <div class="w-full max-w-sm max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl">
+        <div class="p-4 border-b flex justify-between items-center"><h3 class="font-bold">Review Struk</h3><button onclick="closeReceiptReview()" class="text-2xl">&times;</button></div>
+        <div id="receipt-preview" class="p-4"></div>
+        <div class="p-4 pt-0 flex gap-2"><button onclick="closeReceiptReview()" class="flex-1 border rounded-xl py-2 text-sm">Tutup</button><button onclick="printLastReceipt()" class="flex-1 bg-brand-600 text-white rounded-xl py-2 text-sm font-bold">Cetak Struk</button></div>
+      </div>
+    </div>
     <div id="integration-message" role="status" class="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:max-w-md z-[70] hidden rounded-xl px-4 py-3 text-sm font-semibold shadow-xl"></div>
     <script>
     // Integrasi akun POS dan inventaris yang dikelola melalui INDEX ADM > Account Executive.
@@ -420,7 +458,7 @@
         document.getElementById('login-overlay').classList.add('hidden');
         setPOSBrand(currentPOSAccount.brand);
         await loadProductsForAccount();
-        renderPOSCart(); renderHistory(); switchTab('pos');
+        renderPOSCart(); renderHistory(); refreshDashboard(); switchTab('pos');
         notifyPOS('Login berhasil · '+currentPOSAccount.brand+' · '+(currentPOSAccount.resto||'Resto'));
       } catch(e) { notifyPOS(e.message,true); }
       finally { if(btn){btn.disabled=false;btn.querySelector('span').textContent='Masuk ke Menu Kasir';} }
@@ -451,10 +489,104 @@
     function changeQty(i,d){if(!posCart[i])return;posCart[i].qty+=d;if(posCart[i].qty<=0)posCart.splice(i,1);renderPOSCart()}
     function clearCart(){posCart=[];renderPOSCart()}
     function updateCartCalculations(){const subtotal=posCart.reduce((s,x)=>s+x.price*x.qty,0),discount=Math.min(100,Math.max(0,Number(document.getElementById('cart-discount-input')?.value)||0)),disc=subtotal*discount/100,total=subtotal-disc;[['cart-subtotal',money(subtotal)],['cart-discount-amount','-'+money(disc)],['cart-total',money(total)]].forEach(([id,v])=>{const e=document.getElementById(id);if(e)e.textContent=v});const b=document.getElementById('checkout-btn');if(b)b.disabled=!posCart.length}
-    function switchTab(tab){document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));document.getElementById('tab-'+tab)?.classList.remove('hidden');document.querySelectorAll('.tab-btn').forEach(el=>el.classList.remove('bg-white','text-brand-600','shadow-sm'));document.getElementById('nav-'+tab)?.classList.add('bg-white','text-brand-600','shadow-sm')}
-    async function openCheckoutModal(){if(!posCart.length||!currentPOSAccount)return;const subtotal=posCart.reduce((s,x)=>s+x.price*x.qty,0),discountPct=Math.min(100,Math.max(0,Number(document.getElementById('cart-discount-input')?.value)||0)),discount=subtotal*discountPct/100,total=subtotal-discount;const method=prompt('Metode pembayaran: CASH atau QRIS','CASH');if(!method)return;const now=new Date(),id='POS-'+Date.now();const tx={id,date:now.toLocaleString('id-ID'),dateISO:now.toISOString(),cashier:currentPOSAccount.username,brand:currentPOSAccount.brand,resto:currentPOSAccount.resto,salesSource:document.getElementById('pos-sales-source')?.value||'Reguler',items:posCart.map(x=>({...x})),subtotal,discount,total,paymentMethod:method.toUpperCase(),cashGiven:total,change:0,shiftId:'',shiftStatus:'OPEN'};try{const result=await posApi({action:'saveTransaction',transaction:tx});if(result.status!=='success')throw new Error(result.message||'Transaksi gagal disimpan.');posTransactions.unshift({...tx,invoice:id});try{localStorage.setItem('pos_tx_'+currentPOSAccount.username,JSON.stringify(posTransactions))}catch(e){}notifyPOS('Transaksi berhasil disimpan ke server.');posCart=[];renderPOSCart();renderHistory()}catch(e){notifyPOS('Transaksi tidak tersimpan ke server: '+e.message,true)}}
+    function switchTab(tab){if(tab==='dashboard')refreshDashboard();document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));document.getElementById('tab-'+tab)?.classList.remove('hidden');document.querySelectorAll('.tab-btn').forEach(el=>el.classList.remove('bg-white','text-brand-600','shadow-sm'));document.getElementById('nav-'+tab)?.classList.add('bg-white','text-brand-600','shadow-sm')}
+    let pendingCheckout=null, lastCompletedTransaction=null, printerConnected=false;
+    function currentCartTotals(){const subtotal=posCart.reduce((s,x)=>s+x.price*x.qty,0),pct=Math.min(100,Math.max(0,Number(document.getElementById('cart-discount-input')?.value)||0)),discount=subtotal*pct/100;return {subtotal,discount,total:Math.max(0,subtotal-discount)}}
+    function openCheckoutModal(){
+      if(!posCart.length||!currentPOSAccount)return;
+      pendingCheckout=currentCartTotals();
+      document.getElementById('checkout-total').textContent=money(pendingCheckout.total);
+      document.getElementById('payment-method').value='CASH';
+      document.getElementById('cash-given').value='';
+      document.getElementById('checkout-error').classList.add('hidden');
+      updatePaymentFields();
+      const modal=document.getElementById('checkout-modal');modal.classList.remove('hidden');modal.classList.add('flex');
+      setTimeout(()=>document.getElementById('cash-given')?.focus(),50);
+    }
+    function closeCheckoutModal(){const m=document.getElementById('checkout-modal');m.classList.add('hidden');m.classList.remove('flex');}
+    function updatePaymentFields(){
+      const method=document.getElementById('payment-method').value,wrap=document.getElementById('cash-amount-wrap');
+      wrap.classList.toggle('hidden',method!=='CASH');
+      const label=document.querySelector('label[for="cash-given"]');if(label)label.textContent=method==='CASH'?'Nominal uang diterima (Rp)':'Nominal diterima (opsional, Rp)';
+      updateCashChange();
+    }
+    function updateCashChange(){
+      const total=pendingCheckout?.total||0,method=document.getElementById('payment-method')?.value||'CASH';
+      const amount=method==='CASH'?Number(document.getElementById('cash-given')?.value)||0:total;
+      document.getElementById('cash-change').textContent=money(method==='CASH'?Math.max(0,amount-total):0);
+    }
+    async function confirmPayment(){
+      if(!pendingCheckout||!posCart.length||!currentPOSAccount)return;
+      const btn=document.getElementById('confirm-payment-btn'),err=document.getElementById('checkout-error');
+      const method=document.getElementById('payment-method').value,total=pendingCheckout.total;
+      const cashGiven=method==='CASH'?Number(document.getElementById('cash-given').value)||0:total;
+      if(method==='CASH'&&cashGiven<total){err.textContent='Nominal uang diterima kurang dari total tagihan.';err.classList.remove('hidden');return;}
+      btn.disabled=true;btn.textContent='Menyimpan…';
+      const now=new Date(),id='POS-'+Date.now();
+      const tx={id,invoice:id,date:now.toLocaleString('id-ID'),dateISO:now.toISOString(),cashier:currentPOSAccount.username,brand:currentPOSAccount.brand,resto:currentPOSAccount.resto,salesSource:document.getElementById('pos-sales-source')?.value||'Reguler',items:posCart.map(x=>({...x})),subtotal:pendingCheckout.subtotal,discount:pendingCheckout.discount,total,paymentMethod:method,cashGiven,change:method==='CASH'?cashGiven-total:0,shiftId:'',shiftStatus:'OPEN'};
+      try{
+        const result=await posApi({action:'saveTransaction',transaction:tx});
+        if(result.status!=='success')throw new Error(result.message||'Transaksi gagal disimpan.');
+        lastCompletedTransaction=tx;posTransactions.unshift(tx);
+        try{localStorage.setItem('pos_tx_'+currentPOSAccount.username,JSON.stringify(posTransactions))}catch(e){}
+        closeCheckoutModal();posCart=[];renderPOSCart();renderHistory();refreshDashboard();notifyPOS('Pembayaran berhasil disimpan.');
+        reviewReceipt();
+      }catch(e){err.textContent='Pembayaran gagal disimpan: '+e.message;err.classList.remove('hidden');}
+      finally{btn.disabled=false;btn.textContent='Bayar'}
+    }
+    function receiptHTML(tx){
+      if(!tx)return '<p class="text-sm text-slate-500">Belum ada transaksi untuk ditinjau.</p>';
+      return `<div class="mx-auto max-w-[280px] bg-white text-slate-900 font-mono text-xs" id="receipt-content">
+        <div class="text-center border-b border-dashed border-slate-400 pb-3 mb-3"><strong class="text-sm">${esc(tx.brand||'POS')}</strong><div>${esc(tx.resto||'')}</div><div>STRUK PEMBAYARAN</div><div>${esc(tx.date||'')}</div><div>${esc(tx.invoice||tx.id||'')}</div></div>
+        <div class="space-y-2 border-b border-dashed border-slate-400 pb-3 mb-3">${(tx.items||[]).map(i=>`<div><div>${esc(i.name)}</div><div class="flex justify-between"><span>${i.qty} x ${money(i.price)}</span><span>${money(i.qty*i.price)}</span></div></div>`).join('')}</div>
+        <div class="space-y-1"><div class="flex justify-between"><span>Subtotal</span><span>${money(tx.subtotal)}</span></div><div class="flex justify-between"><span>Diskon</span><span>-${money(tx.discount)}</span></div><div class="flex justify-between font-bold text-sm border-t border-dashed border-slate-400 pt-2"><span>TOTAL</span><span>${money(tx.total)}</span></div><div class="flex justify-between"><span>Metode</span><span>${esc(tx.paymentMethod)}</span></div><div class="flex justify-between"><span>Diterima</span><span>${money(tx.cashGiven)}</span></div>${tx.paymentMethod==='CASH'?`<div class="flex justify-between"><span>Kembalian</span><span>${money(tx.change)}</span></div>`:''}</div>
+        <div class="text-center border-t border-dashed border-slate-400 mt-3 pt-3">Terima kasih<br>Silakan datang kembali</div></div>`;
+    }
+    function reviewReceipt(){
+      const tx=lastCompletedTransaction||posTransactions[0]||null;
+      document.getElementById('receipt-preview').innerHTML=receiptHTML(tx);
+      const m=document.getElementById('receipt-review-modal');m.classList.remove('hidden');m.classList.add('flex');
+    }
+    function closeReceiptReview(){const m=document.getElementById('receipt-review-modal');m.classList.add('hidden');m.classList.remove('flex')}
+    function printLastReceipt(){
+      const tx=lastCompletedTransaction||posTransactions[0];if(!tx){notifyPOS('Belum ada struk yang dapat dicetak.',true);return}
+      document.getElementById('receipt-print-area').innerHTML=receiptHTML(tx);
+      window.print();
+    }
+    async function connectReceiptPrinter(){
+      // Web browser tidak mengizinkan pemilihan printer universal; membuka dialog cetak adalah opsi lintas perangkat.
+      document.getElementById('printer-status').textContent='Pilih printer pada dialog cetak browser.';
+      try{window.print();printerConnected=true;document.getElementById('printer-status').textContent='Printer dapat dipilih dari dialog cetak browser.'}
+      catch(e){notifyPOS('Tidak dapat membuka dialog cetak. Periksa izin browser.',true)}
+    }
+
+    function refreshDashboard(){
+      const rows=Array.isArray(posTransactions)?posTransactions:[];
+      const today=new Date().toLocaleDateString('id-ID');
+      const todays=rows.filter(t=>{
+        const d=t.dateISO?new Date(t.dateISO):new Date(t.date||0);
+        return !isNaN(d.getTime()) && d.toLocaleDateString('id-ID')===today;
+      });
+      const total=arr=>arr.reduce((sum,t)=>sum+(Number(t.total)||0),0);
+      const items=arr=>arr.reduce((sum,t)=>sum+(t.items||[]).reduce((a,i)=>a+(Number(i.qty)||0),0),0);
+      const set=(id,value)=>{const el=document.getElementById(id);if(el)el.textContent=value};
+      set('stat-total-sales',money(total(todays)));
+      set('stat-total-transactions',todays.length+' Transaksi');
+      set('stat-total-items-sold',items(todays)+' Porsi');
+      set('stat-total-cash',money(total(todays.filter(t=>String(t.paymentMethod||'').toUpperCase()==='CASH'))));
+      set('stat-total-qris',money(total(todays.filter(t=>String(t.paymentMethod||'').toUpperCase()==='QRIS'))));
+      const menuTotals={};
+      todays.forEach(t=>(t.items||[]).forEach(i=>{const n=String(i.name||'Menu');menuTotals[n]=(menuTotals[n]||0)+(Number(i.qty)||0)}));
+      const menuEl=document.getElementById('dashboard-daily-menu-sales');
+      if(menuEl)menuEl.innerHTML=Object.entries(menuTotals).sort((a,b)=>b[1]-a[1]).map(([n,q])=>`<div class="flex justify-between gap-2 py-1 border-b border-slate-100"><span>${esc(n)}</span><strong>${q}</strong></div>`).join('')||'<p class="text-slate-400">Belum ada penjualan hari ini.</p>';
+      const bestEl=document.getElementById('dashboard-best-sellers');
+      if(bestEl)bestEl.innerHTML=Object.entries(menuTotals).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([n,q],i)=>`<div class="flex justify-between items-center gap-2 rounded-lg bg-slate-50 p-2"><span class="text-xs font-medium">${i+1}. ${esc(n)}</span><strong class="text-xs">${q} terjual</strong></div>`).join('')||'<p class="text-slate-400 text-xs">Belum ada produk terjual hari ini.</p>';
+      const recentEl=document.getElementById('dashboard-recent-tx');
+      if(recentEl)recentEl.innerHTML=rows.slice(0,8).map(t=>`<div class="rounded-lg border border-slate-100 p-2"><div class="flex justify-between gap-2"><strong class="text-xs">${esc(t.invoice||t.id||'POS')}</strong><strong class="text-xs">${money(t.total)}</strong></div><div class="text-[10px] text-slate-500 mt-1">${esc(t.date||'')} · ${esc(t.paymentMethod||'-')}</div></div>`).join('')||'<p class="text-slate-400 text-xs">Belum ada transaksi.</p>';
+    }
+
     function renderHistory(){const body=document.getElementById('history-table-body');if(!body)return;body.innerHTML=posTransactions.length?posTransactions.map(t=>`<tr><td class="p-4">${esc(t.invoice)}</td><td class="p-4">${new Date(t.date).toLocaleString('id-ID')}</td><td class="p-4">${esc(t.resto)}</td><td class="p-4">${esc(t.brand)}</td><td class="p-4">${money(t.total)}</td></tr>`).join(''):'<tr><td colspan="5" class="p-6 text-center text-slate-500">Belum ada transaksi pada perangkat ini.</td></tr>'}
-    function logoutToLogin(){if(currentPOSAccount){try{localStorage.removeItem('pos_tx_'+currentPOSAccount.username)}catch(e){}}currentPOSAccount=null;posCart=[];posProducts=[];document.getElementById('login-overlay').classList.remove('hidden');document.getElementById('login-password').value='';document.getElementById('login-username').value='';renderPOSCart();switchTab('pos')}
-    document.addEventListener('DOMContentLoaded',()=>{try{if(window.lucide)lucide.createIcons()}catch(e){};document.getElementById('login-password')?.addEventListener('keydown',e=>{if(e.key==='Enter')handleLoginSubmit()});document.getElementById('login-username')?.addEventListener('keydown',e=>{if(e.key==='Enter')handleLoginSubmit()});switchTab('pos')});
+    function logoutToLogin(){currentPOSAccount=null;posCart=[];posProducts=[];document.getElementById('login-overlay').classList.remove('hidden');document.getElementById('login-password').value='';document.getElementById('login-username').value='';renderPOSCart();switchTab('pos')}
+    document.addEventListener('DOMContentLoaded',()=>{try{if(window.lucide)lucide.createIcons()}catch(e){};document.getElementById('login-password')?.addEventListener('keydown',e=>{if(e.key==='Enter')handleLoginSubmit()});document.getElementById('login-username')?.addEventListener('keydown',e=>{if(e.key==='Enter')handleLoginSubmit()});switchTab('pos');document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeCheckoutModal();closeReceiptReview()}})});
     </script>
 </body></html>
