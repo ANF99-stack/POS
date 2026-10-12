@@ -2,8 +2,19 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aplikasi POS Modern - KasirKu Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>KasirKu Pro - POS Restoran & Printer 58mm</title>
+    <!-- PWA & Mobile Web App Meta -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#4f46e5">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="KasirKu POS">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/svg+xml" href="/icon.svg">
+    <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png">
+
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -34,13 +45,48 @@
         }
     </script>
     <style>
-        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        html, body {
+            height: 100%;
+            height: 100vh;
+            height: 100dvh;
+            min-height: 100%;
+            min-height: 100vh;
+            min-height: 100dvh;
+            max-height: 100vh;
+            max-height: 100dvh;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            overscroll-behavior-y: contain;
+        }
+        button, a, select, input {
+            touch-action: manipulation;
+        }
         .font-mono { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
         .tabular-nums { font-variant-numeric: tabular-nums; }
         ::-webkit-scrollbar { width: 5px; height: 5px; }
         ::-webkit-scrollbar-track { background: #f1f5f9; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* Menyesuaikan keranjang ke bawah layar dan kompatibel di semua browser */
+        .cart-scroll-area {
+            min-height: 0 !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            overscroll-behavior: contain !important;
+        }
+        .safe-bottom-padding {
+            padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0.75rem));
+        }
+
+        @media (min-width: 768px) {
+            #pos-catalog-panel, #pos-cart-panel {
+                display: flex !important;
+            }
+        }
         
         @media print {
             body * { visibility: hidden !important; }
@@ -72,7 +118,7 @@
         }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-800 h-screen flex flex-col overflow-hidden">
+<body class="bg-slate-50 text-slate-800 h-full min-h-full max-h-[100dvh] flex flex-col overflow-hidden">
 
     <!-- ================= HALAMAN LOGIN ================= -->
     <div id="login-overlay" class="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
@@ -106,6 +152,13 @@
                         </button>
                         <button type="button" onclick="handleQuickDemoLogin('NGEUMI')" class="py-2 px-3 rounded-lg border border-orange-200 hover:bg-orange-50 text-orange-700 text-xs font-medium transition-colors cursor-pointer text-center">
                             Akun Ngeumi
+                        </button>
+                    </div>
+
+                    <div class="pt-3 mt-3 border-t border-slate-100">
+                        <button type="button" onclick="triggerPWAInstall()" id="login-install-btn" class="w-full py-2.5 px-3 rounded-xl border border-indigo-200 bg-indigo-50/80 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer">
+                            <i data-lucide="smartphone" class="w-4 h-4 text-indigo-600"></i>
+                            <span id="login-install-btn-text">Pasang Aplikasi di Perangkat (Install App)</span>
                         </button>
                     </div>
                 </div>
@@ -146,6 +199,16 @@
 
         <!-- Printer 58mm Status & Role Badge -->
         <div class="flex items-center space-x-2">
+            <!-- PWA Install Button / Standalone Badge -->
+            <button onclick="triggerPWAInstall()" id="header-install-btn" class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100 cursor-pointer shadow-xs" title="Pasang Aplikasi KasirKu Pro di Perangkat">
+                <i data-lucide="download" class="w-3.5 h-3.5 text-indigo-600" id="header-install-icon"></i>
+                <span id="header-install-text" class="hidden sm:inline">Install App</span>
+            </button>
+            <div id="header-installed-badge" class="hidden items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-[11px] font-semibold text-emerald-700 shadow-xs" title="Aplikasi Berjalan dalam Mode PWA Terpasang">
+                <i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-emerald-600"></i>
+                <span class="hidden md:inline">Mode App</span>
+            </div>
+
             <!-- Bluetooth Printer Quick Badge -->
             <button onclick="openPrinterModal()" id="header-printer-btn" class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200 cursor-pointer">
                 <i data-lucide="bluetooth" class="w-3.5 h-3.5 text-slate-500" id="header-bt-icon"></i>
@@ -173,12 +236,27 @@
         </div>
     </header>
 
-    <main class="flex-1 overflow-hidden relative">
+    <main class="flex-1 min-h-0 h-full overflow-hidden relative flex flex-col">
 
         <!-- ================= 1. TAB KASIR (POS) ================= -->
-        <div id="tab-pos" class="tab-content h-full flex flex-col lg:flex-row">
+        <div id="tab-pos" class="tab-content h-full min-h-0 flex flex-col md:flex-row overflow-hidden relative">
+            <!-- Mobile View Switcher (Hanya muncul di layar HP < 768px agar kasir leluasa melihat keranjang atau menu) -->
+            <div class="md:hidden flex items-center justify-between p-2 bg-white border-b border-slate-200 shrink-0 gap-2">
+                <div class="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl flex-1">
+                    <button type="button" onclick="setMobilePosView('catalog')" id="mobile-tab-catalog-btn" class="py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 bg-white text-brand-600 shadow-xs cursor-pointer">
+                        <i data-lucide="layout-grid" class="w-3.5 h-3.5"></i>
+                        <span>Katalog Menu</span>
+                    </button>
+                    <button type="button" onclick="setMobilePosView('cart')" id="mobile-tab-cart-btn" class="py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 text-slate-600 hover:text-slate-900 cursor-pointer">
+                        <i data-lucide="shopping-bag" class="w-3.5 h-3.5"></i>
+                        <span>Keranjang</span>
+                        <span id="mobile-cart-count-badge" class="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-brand-600 text-white font-mono hidden">0</span>
+                    </button>
+                </div>
+            </div>
+
             <!-- Left: Product Catalog -->
-            <div class="flex-1 flex flex-col h-full bg-slate-50 overflow-hidden p-2.5 sm:p-4">
+            <div id="pos-catalog-panel" class="flex-1 min-w-0 min-h-0 flex flex-col h-full bg-slate-50 overflow-hidden p-2.5 sm:p-4">
                 <!-- Identitas transaksi otomatis terikat brand & tipe user kasir -->
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3 shrink-0">
                     <input id="pos-resto" type="text" readonly placeholder="Nama/kode resto" aria-label="Nama atau kode resto" class="min-w-0 px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-xs text-slate-700 font-semibold focus:outline-none">
@@ -202,29 +280,52 @@
                 </div>
 
                 <!-- Product Grid -->
-                <div class="flex-1 overflow-y-auto pr-1">
+                <div class="flex-1 min-h-0 overflow-y-auto pr-1">
                     <div id="product-grid" class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5">
                         <!-- Rendered dynamically via JS -->
                     </div>
                 </div>
+
+                <!-- Floating Mobile Cart Bar (Hanya tampil di HP saat ada item di keranjang) -->
+                <div id="mobile-floating-cart-bar" class="md:hidden hidden shrink-0 pt-2 safe-bottom-padding">
+                    <button type="button" onclick="setMobilePosView('cart')" class="w-full py-2.5 px-4 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-xs flex items-center justify-between shadow-md shadow-brand-600/30 transition-all active:scale-[0.99] cursor-pointer">
+                        <div class="flex items-center gap-2">
+                            <span class="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-[11px] font-mono font-bold" id="floating-cart-qty">0</span>
+                            <span class="font-bold">Buka Keranjang</span>
+                        </div>
+                        <div class="flex items-center gap-1.5 font-mono">
+                            <span class="text-xs font-bold tabular-nums" id="floating-cart-total">Rp 0</span>
+                            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                        </div>
+                    </button>
+                </div>
             </div>
 
-            <!-- Right: Interactive Cart / Checkout Panel -->
-            <div class="w-full lg:w-80 xl:w-96 bg-white border-t lg:border-t-0 lg:border-l border-slate-200 flex flex-col h-1/2 lg:h-full shadow-lg z-10 shrink-0">
-                <div class="p-2.5 sm:p-3 border-b border-slate-200 flex items-center justify-between bg-slate-50/50 shrink-0">
+            <!-- Right: Interactive Cart / Checkout Panel (Menyesuaikan panjang layar ke bawah & kompatibel di semua browser) -->
+            <div id="pos-cart-panel" class="hidden md:flex w-full md:w-80 lg:w-88 xl:w-96 bg-white border-t md:border-t-0 md:border-l border-slate-200 flex-col h-full min-h-0 shadow-lg z-10 shrink-0">
+                <div class="p-2.5 sm:p-3 border-b border-slate-200 flex items-center justify-between bg-slate-50/70 shrink-0">
                     <div class="flex items-center space-x-1.5">
+                        <button type="button" onclick="setMobilePosView('catalog')" class="md:hidden p-1 mr-0.5 text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 rounded-lg transition-colors cursor-pointer" title="Kembali ke Menu">
+                            <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                        </button>
                         <i data-lucide="shopping-bag" class="w-4 h-4 text-brand-600"></i>
                         <h2 class="font-bold text-slate-800 text-xs sm:text-sm">Keranjang</h2>
+                        <span id="cart-item-count-badge" class="text-[10px] bg-slate-200/80 text-slate-700 px-1.5 py-0.5 rounded-full font-mono font-bold">0</span>
                     </div>
-                    <button onclick="clearCart()" class="text-[11px] text-rose-600 hover:text-rose-700 font-medium px-2 py-0.5 rounded hover:bg-rose-50 transition-colors flex items-center space-x-1 cursor-pointer">
-                        <i data-lucide="trash-2" class="w-3 h-3"></i>
-                        <span>Kosongkan</span>
-                    </button>
+                    <div class="flex items-center space-x-1">
+                        <button type="button" onclick="setMobilePosView('catalog')" class="md:hidden text-[11px] text-brand-600 font-bold px-2 py-1 rounded bg-brand-50 hover:bg-brand-100 transition-colors cursor-pointer">
+                            + Menu
+                        </button>
+                        <button type="button" onclick="clearCart()" class="text-[11px] text-rose-600 hover:text-rose-700 font-medium px-2 py-1 rounded hover:bg-rose-50 transition-colors flex items-center space-x-1 cursor-pointer" title="Kosongkan Keranjang">
+                            <i data-lucide="trash-2" class="w-3 h-3"></i>
+                            <span class="hidden sm:inline">Kosongkan</span>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Quick Printer Bar in Cart -->
                 <div class="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs shrink-0">
-                    <button onclick="openPrinterModal()" class="flex items-center space-x-1 font-medium text-slate-700 hover:text-slate-900 truncate cursor-pointer">
+                    <button type="button" onclick="openPrinterModal()" class="flex items-center space-x-1 font-medium text-slate-700 hover:text-slate-900 truncate cursor-pointer">
                         <i data-lucide="printer" class="w-3.5 h-3.5 text-brand-600"></i>
                         <span id="cart-printer-label" class="truncate">Printer 58mm</span>
                     </button>
@@ -234,16 +335,16 @@
                     </label>
                 </div>
 
-                <!-- Cart Items List -->
-                <div id="cart-items" class="flex-1 overflow-y-auto p-2.5 sm:p-3 space-y-2 divide-y divide-slate-100">
+                <!-- Cart Items List (Mengisi seluruh ruang tinggi ke bawah dan scroll mulus tanpa terpotong) -->
+                <div id="cart-items" class="cart-scroll-area flex-1 min-h-0 overflow-y-auto p-2.5 sm:p-3 space-y-2 divide-y divide-slate-100 overscroll-contain">
                     <div class="text-center py-6 text-slate-400">
                         <i data-lucide="shopping-cart" class="w-8 h-8 mx-auto mb-2 opacity-40"></i>
                         <p class="text-xs font-medium">Keranjang kosong</p>
                     </div>
                 </div>
 
-                <!-- Cart Summary & Calculations -->
-                <div class="p-2.5 sm:p-3 bg-slate-50 border-t border-slate-200 shrink-0 space-y-2">
+                <!-- Cart Summary & Calculations (Tetap berada di bawah layar, aman & kompatibel) -->
+                <div class="p-2.5 sm:p-3 bg-slate-50 border-t border-slate-200 shrink-0 space-y-2 mt-auto safe-bottom-padding shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.03)]">
                     <div class="space-y-1 text-xs">
                         <div class="flex justify-between text-slate-600">
                             <span>Subtotal</span>
@@ -263,7 +364,7 @@
                         </div>
                     </div>
 
-                    <button onclick="openCheckoutModal()" id="checkout-btn" disabled class="w-full py-2.5 bg-brand-600 text-white font-semibold rounded-lg shadow-md shadow-brand-500/20 hover:bg-brand-700 disabled:bg-slate-300 disabled:shadow-none disabled:cursor-not-allowed transition-all flex items-center justify-center space-x-1.5 text-xs cursor-pointer">
+                    <button type="button" onclick="openCheckoutModal()" id="checkout-btn" disabled class="w-full py-2.5 bg-brand-600 text-white font-semibold rounded-lg shadow-md shadow-brand-500/20 hover:bg-brand-700 disabled:bg-slate-300 disabled:shadow-none disabled:cursor-not-allowed transition-all flex items-center justify-center space-x-1.5 text-xs cursor-pointer active:scale-[0.99]">
                         <i data-lucide="credit-card" class="w-4 h-4"></i>
                         <span>Proses Bayar</span>
                     </button>
@@ -409,6 +510,44 @@
                             <i data-lucide="bluetooth-off" class="w-4 h-4"></i>
                             <span>Putuskan</span>
                         </button>
+                    </div>
+                </div>
+
+                <!-- PWA App Installation & Offline Status Card -->
+                <div id="dashboard-pwa-card" class="bg-gradient-to-r from-indigo-50/80 via-white to-purple-50/40 p-4 sm:p-6 rounded-2xl border border-indigo-100 shadow-sm">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div class="flex items-start md:items-center space-x-3.5">
+                            <div class="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-indigo-500/20">
+                                <i data-lucide="smartphone" class="w-6 h-6"></i>
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <h3 class="font-bold text-base text-slate-900">Aplikasi KasirKu Pro (PWA)</h3>
+                                    <span id="dashboard-pwa-badge" class="text-[10px] bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full border border-indigo-200">
+                                        Siap Dipasang
+                                    </span>
+                                </div>
+                                <p class="text-xs text-slate-600 mt-0.5">Jadikan aplikasi mandiri di HP Android, iPhone, iPad, atau Laptop/PC. Lebih cepat, responsif, dan siap transaksi offline.</p>
+                            </div>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2 shrink-0">
+                            <button onclick="triggerPWAInstall()" id="dashboard-pwa-btn" class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 flex items-center gap-1.5 transition-all cursor-pointer">
+                                <i data-lucide="smartphone" class="w-4 h-4"></i>
+                                <span id="dashboard-pwa-btn-text">Pasang Aplikasi Sekarang</span>
+                            </button>
+                            <button onclick="downloadCurrentAppFile()" class="px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer" title="Download file HTML aplikasi">
+                                <i data-lucide="download" class="w-4 h-4 text-brand-600"></i>
+                                <span>Download File (.html)</span>
+                            </button>
+                            <button onclick="copyCurrentAppLink()" class="px-3 py-2.5 rounded-xl border border-indigo-200 bg-indigo-50/60 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer" title="Salin link aplikasi">
+                                <i data-lucide="copy" class="w-4 h-4 text-indigo-600"></i>
+                                <span>Salin Link</span>
+                            </button>
+                            <button onclick="openPWAHelpModal()" class="px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer">
+                                <i data-lucide="help-circle" class="w-4 h-4 text-slate-400"></i>
+                                <span>Panduan Pasang</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -605,6 +744,122 @@
             </div>
         </div>
       </div>
+    </div>
+
+    <!-- ================= MODAL PANDUAN INSTALASI APLIKASI (PWA) ================= -->
+    <div id="pwa-install-modal" class="fixed inset-0 z-[88] hidden items-center justify-center bg-slate-950/65 backdrop-blur-sm p-3" role="dialog" aria-modal="true">
+      <div class="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl bg-white shadow-2xl overflow-hidden border border-slate-100 flex flex-col">
+        <div class="p-5 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+                    <i data-lucide="smartphone" class="w-6 h-6 text-white"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-base">Pasang Aplikasi KasirKu Pro</h3>
+                    <p class="text-xs text-indigo-100">Instal di HP, Tablet, atau Komputer (PWA)</p>
+                </div>
+            </div>
+            <button onclick="closePWAHelpModal()" class="text-2xl leading-none text-white/80 hover:text-white cursor-pointer">&times;</button>
+        </div>
+        
+        <div class="p-5 space-y-4 text-slate-700">
+            <!-- Quick 1-Click Action if available -->
+            <div id="pwa-modal-prompt-area" class="p-4 bg-indigo-50/80 rounded-2xl border border-indigo-100">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="w-2 h-2 rounded-full bg-indigo-600 animate-ping"></span>
+                    <span class="text-xs font-bold text-indigo-900">Instalasi Otomatis Didukung Browser</span>
+                </div>
+                <p class="text-xs text-slate-600 mb-3">Klik tombol di bawah ini untuk langsung menambahkan KasirKu Pro ke layar utama perangkat Anda.</p>
+                <button onclick="triggerPWAInstall()" class="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer">
+                    <i data-lucide="download" class="w-4 h-4"></i>
+                    <span>Pasang Sekarang (Install App)</span>
+                </button>
+            </div>
+
+            <!-- Platform Guides -->
+            <div class="space-y-3">
+                <div class="text-xs font-bold text-slate-800 uppercase tracking-wider">Panduan Pemasangan Manual:</div>
+
+                <!-- Android Guide -->
+                <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <div class="flex items-center gap-2 font-bold text-xs text-slate-900 mb-1">
+                        <i data-lucide="play" class="w-3.5 h-3.5 text-emerald-600"></i>
+                        <span>Android (Chrome / Samsung Internet)</span>
+                    </div>
+                    <ol class="text-[11px] text-slate-600 space-y-1 list-decimal list-inside pl-1">
+                        <li>Buka aplikasi ini di <strong>Google Chrome</strong>.</li>
+                        <li>Tekan ikon <strong>Titik Tiga (⋮)</strong> di sudut kanan atas.</li>
+                        <li>Pilih <strong>"Instal Aplikasi"</strong> atau <strong>"Tambahkan ke Layar Utama"</strong>.</li>
+                    </ol>
+                </div>
+
+                <!-- iOS / iPhone Guide -->
+                <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <div class="flex items-center gap-2 font-bold text-xs text-slate-900 mb-1">
+                        <i data-lucide="apple" class="w-3.5 h-3.5 text-slate-900"></i>
+                        <span>iPhone & iPad (Safari)</span>
+                    </div>
+                    <ol class="text-[11px] text-slate-600 space-y-1 list-decimal list-inside pl-1">
+                        <li>Buka tautan ini di browser <strong>Safari</strong>.</li>
+                        <li>Tekan tombol <strong>Bagikan / Share</strong> (ikon kotak berpanah ke atas di bawah).</li>
+                        <li>Gulir ke bawah dan ketuk <strong>"Tambah ke Layar Utama" (Add to Home Screen)</strong>.</li>
+                    </ol>
+                </div>
+
+                <!-- PC / Mac Guide -->
+                <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <div class="flex items-center gap-2 font-bold text-xs text-slate-900 mb-1">
+                        <i data-lucide="monitor" class="w-3.5 h-3.5 text-indigo-600"></i>
+                        <span>Komputer & Laptop (Chrome / Edge)</span>
+                    </div>
+                    <ol class="text-[11px] text-slate-600 space-y-1 list-decimal list-inside pl-1">
+                        <li>Klik ikon <strong>Instal</strong> (layar kecil atau simbol +) di bilah alamat atas kanan.</li>
+                        <li>Atau klik menu titik tiga browser &gt; <strong>"Instal KasirKu Pro"</strong>.</li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- Download & Direct Link Section -->
+            <div class="p-3.5 bg-indigo-50/70 rounded-2xl border border-indigo-100 space-y-2">
+                <div class="flex items-center justify-between text-xs font-bold text-indigo-900">
+                    <span class="flex items-center gap-1.5">
+                        <i data-lucide="link" class="w-3.5 h-3.5 text-indigo-600"></i>
+                        <span>Link Aplikasi (Buka di Browser):</span>
+                    </span>
+                    <button type="button" onclick="copyCurrentAppLink()" class="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 cursor-pointer">
+                        <i data-lucide="copy" class="w-3 h-3"></i>
+                        <span>Salin Link</span>
+                    </button>
+                </div>
+                <div class="font-mono text-[11px] text-slate-700 bg-white p-2.5 rounded-xl border border-slate-200 break-all select-all shadow-xs" id="pwa-modal-link-display">
+                    Memuat link aplikasi...
+                </div>
+                <button type="button" onclick="downloadCurrentAppFile()" class="w-full py-2.5 px-3 bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs">
+                    <i data-lucide="file-down" class="w-4 h-4 text-brand-600"></i>
+                    <span>Download File Aplikasi (.html)</span>
+                </button>
+            </div>
+
+            <div class="p-3 bg-emerald-50 rounded-xl border border-emerald-100 flex items-start gap-2 text-[11px] text-emerald-800">
+                <i data-lucide="check-circle" class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5"></i>
+                <div>
+                    <strong>Keuntungan Mode Aplikasi:</strong> Membuka dalam layar penuh tanpa address bar, mendukung offline cache, dan akses Bluetooth thermal 58mm yang stabil.
+                </div>
+            </div>
+        </div>
+
+        <div class="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+            <button onclick="closePWAHelpModal()" class="px-5 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold transition-all cursor-pointer">
+                Tutup Panduan
+            </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= NOTIFIKASI OFFLINE ================= -->
+    <div id="offline-toast" class="hidden fixed bottom-4 left-4 z-[95] flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-xs font-semibold text-white shadow-xl animate-pulse">
+        <i data-lucide="wifi-off" class="w-4 h-4 text-white"></i>
+        <span>Mode Offline Aktif — Transaksi & struk 58mm tetap berfungsi normal.</span>
     </div>
 
     <!-- ================= NOTIFIKASI TOAST ================= -->
@@ -1475,27 +1730,82 @@
         renderPOSCart();
     }
 
+    let mobilePosView = 'catalog';
+
+    function setMobilePosView(view) {
+        mobilePosView = view === 'cart' ? 'cart' : 'catalog';
+        const catalogPanel = document.getElementById('pos-catalog-panel');
+        const cartPanel = document.getElementById('pos-cart-panel');
+        const tabCatBtn = document.getElementById('mobile-tab-catalog-btn');
+        const tabCartBtn = document.getElementById('mobile-tab-cart-btn');
+        const floatBar = document.getElementById('mobile-floating-cart-bar');
+
+        if (!catalogPanel || !cartPanel) return;
+
+        if (window.innerWidth < 768) {
+            if (mobilePosView === 'cart') {
+                catalogPanel.classList.add('hidden');
+                catalogPanel.classList.remove('flex');
+                cartPanel.classList.remove('hidden');
+                cartPanel.classList.add('flex');
+                if (tabCartBtn) {
+                    tabCartBtn.className = 'py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 bg-white text-brand-600 shadow-xs cursor-pointer';
+                }
+                if (tabCatBtn) {
+                    tabCatBtn.className = 'py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 text-slate-600 hover:text-slate-900 cursor-pointer';
+                }
+                if (floatBar) floatBar.classList.add('hidden');
+            } else {
+                catalogPanel.classList.remove('hidden');
+                catalogPanel.classList.add('flex');
+                cartPanel.classList.add('hidden');
+                cartPanel.classList.remove('flex');
+                if (tabCatBtn) {
+                    tabCatBtn.className = 'py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 bg-white text-brand-600 shadow-xs cursor-pointer';
+                }
+                if (tabCartBtn) {
+                    tabCartBtn.className = 'py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 text-slate-600 hover:text-slate-900 cursor-pointer';
+                }
+                const totalQty = posCart.reduce((s, x) => s + x.qty, 0);
+                if (floatBar) {
+                    if (totalQty > 0) floatBar.classList.remove('hidden');
+                    else floatBar.classList.add('hidden');
+                }
+            }
+        } else {
+            catalogPanel.classList.remove('hidden');
+            catalogPanel.classList.add('flex');
+            cartPanel.classList.remove('hidden');
+            cartPanel.classList.add('flex');
+            if (floatBar) floatBar.classList.add('hidden');
+        }
+        if (window.lucide) lucide.createIcons();
+    }
+
     function renderPOSCart() {
         const box = document.getElementById('cart-items');
         if (!box) return;
         box.innerHTML = posCart.length ? posCart.map((x, i) => `
-            <div class="py-2 flex items-center justify-between gap-2">
-                <div class="min-w-0">
-                    <div class="font-semibold text-xs text-slate-800 truncate">${esc(x.name)}</div>
-                    <div class="text-[11px] text-slate-500 font-mono tabular-nums">${money(x.price)} × ${x.qty}</div>
+            <div class="py-2.5 flex items-center justify-between gap-2 border-b border-slate-100 last:border-b-0">
+                <div class="min-w-0 flex-1">
+                    <div class="font-bold text-xs text-slate-800 truncate leading-snug">${esc(x.name)}</div>
+                    <div class="text-[11px] text-slate-500 font-mono tabular-nums mt-0.5">${money(x.price)} × ${x.qty} = <span class="font-semibold text-slate-700">${money(x.price * x.qty)}</span></div>
                 </div>
-                <div class="flex items-center gap-1 shrink-0">
-                    <button onclick="changeQty(${i},-1)" class="w-6 h-6 flex items-center justify-center border border-slate-200 rounded text-xs font-bold hover:bg-slate-100 cursor-pointer">−</button>
-                    <span class="w-5 text-center text-xs font-semibold font-mono tabular-nums">${x.qty}</span>
-                    <button onclick="changeQty(${i},1)" class="w-6 h-6 flex items-center justify-center border border-slate-200 rounded text-xs font-bold hover:bg-slate-100 cursor-pointer">+</button>
+                <div class="flex items-center gap-1 shrink-0 bg-slate-50 border border-slate-200 rounded-lg p-0.5">
+                    <button type="button" onclick="changeQty(${i},-1)" class="w-6 h-6 flex items-center justify-center bg-white border border-slate-200 rounded text-xs font-bold hover:bg-slate-100 active:scale-95 text-slate-700 transition-all cursor-pointer">">−</button>
+                    <span class="w-6 text-center text-xs font-bold font-mono tabular-nums text-slate-800">${x.qty}</span>
+                    <button type="button" onclick="changeQty(${i},1)" class="w-6 h-6 flex items-center justify-center bg-white border border-slate-200 rounded text-xs font-bold hover:bg-slate-100 active:scale-95 text-slate-700 transition-all cursor-pointer">+</button>
                 </div>
             </div>
-        `).join('') : '<div class="text-center py-6 text-slate-400"><p class="text-xs font-medium">Keranjang kosong</p></div>';
+        `).join('') : '<div class="text-center py-10 text-slate-400"><i data-lucide="shopping-cart" class="w-10 h-10 mx-auto mb-2 opacity-30"></i><p class="text-xs font-medium">Keranjang masih kosong</p><p class="text-[11px] text-slate-400 mt-1">Pilih menu dari katalog di samping</p></div>';
+        
+        if (window.lucide) lucide.createIcons();
         updateCartCalculations();
     }
 
     function updateCartCalculations() {
         const subtotal = posCart.reduce((s, x) => s + x.price * x.qty, 0);
+        const totalQty = posCart.reduce((s, x) => s + x.qty, 0);
         const discountInput = document.getElementById('cart-discount-input');
         const discount = Math.min(100, Math.max(0, Number(discountInput?.value) || 0));
         const disc = subtotal * discount / 100;
@@ -1506,8 +1816,35 @@
         set('cart-discount-amount', '-' + money(disc));
         set('cart-total', money(total));
 
+        // Update badge jumlah item di header keranjang
+        set('cart-item-count-badge', String(totalQty));
+
+        // Update tombol proses bayar
         const btn = document.getElementById('checkout-btn');
         if (btn) btn.disabled = !posCart.length;
+
+        // Update elemen mobile (floating bar & mobile badge)
+        const mobileBadge = document.getElementById('mobile-cart-count-badge');
+        if (mobileBadge) {
+            mobileBadge.textContent = String(totalQty);
+            if (totalQty > 0) mobileBadge.classList.remove('hidden');
+            else mobileBadge.classList.add('hidden');
+        }
+
+        const floatQty = document.getElementById('floating-cart-qty');
+        if (floatQty) floatQty.textContent = String(totalQty);
+
+        const floatTotal = document.getElementById('floating-cart-total');
+        if (floatTotal) floatTotal.textContent = money(total);
+
+        const floatBar = document.getElementById('mobile-floating-cart-bar');
+        if (floatBar) {
+            if (totalQty > 0 && window.innerWidth < 768 && mobilePosView === 'catalog') {
+                floatBar.classList.remove('hidden');
+            } else {
+                floatBar.classList.add('hidden');
+            }
+        }
     }
 
     function currentCartTotals() {
@@ -1675,6 +2012,7 @@
 
             closeCheckoutModal();
             clearCart();
+            if (window.innerWidth < 768) setMobilePosView('catalog');
             renderHistory();
             refreshDashboard();
 
@@ -1788,6 +2126,208 @@
         if (window.lucide) lucide.createIcons();
     }
 
+    // ================= PWA & INSTALASI APLIKASI =================
+    let deferredPWAInstallPrompt = null;
+    let isPWAInstalled = false;
+
+    function checkStandaloneMode() {
+        return window.matchMedia('(display-mode: standalone)').matches ||
+               (window.navigator.standalone === true) ||
+               document.referrer.includes('android-app://');
+    }
+
+    function updatePWAInstallUI() {
+        const standalone = checkStandaloneMode();
+        isPWAInstalled = standalone;
+
+        const headerBtn = document.getElementById('header-install-btn');
+        const headerBadge = document.getElementById('header-installed-badge');
+        const dashBadge = document.getElementById('dashboard-pwa-badge');
+        const dashBtn = document.getElementById('dashboard-pwa-btn');
+        const dashBtnText = document.getElementById('dashboard-pwa-btn-text');
+        const loginBtn = document.getElementById('login-install-btn');
+        const promptArea = document.getElementById('pwa-modal-prompt-area');
+
+        if (standalone) {
+            if (headerBtn) headerBtn.classList.add('hidden');
+            if (headerBadge) {
+                headerBadge.classList.remove('hidden');
+                headerBadge.classList.add('flex');
+            }
+            if (dashBadge) {
+                dashBadge.textContent = 'Terpasang (App Mode)';
+                dashBadge.className = 'text-[10px] bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded-full border border-emerald-200';
+            }
+            if (dashBtn) {
+                dashBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+                dashBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+            }
+            if (dashBtnText) {
+                dashBtnText.textContent = 'Aplikasi Sedang Berjalan';
+            }
+            if (loginBtn) {
+                loginBtn.classList.add('hidden');
+            }
+            if (promptArea) {
+                promptArea.classList.add('hidden');
+            }
+        } else {
+            if (headerBadge) {
+                headerBadge.classList.add('hidden');
+                headerBadge.classList.remove('flex');
+            }
+            if (headerBtn) {
+                headerBtn.classList.remove('hidden');
+            }
+            if (dashBadge) {
+                dashBadge.textContent = deferredPWAInstallPrompt ? 'Siap Dipasang (1-Klik)' : 'Tersedia Sebagai Aplikasi';
+                dashBadge.className = 'text-[10px] bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full border border-indigo-200';
+            }
+            if (dashBtnText) {
+                dashBtnText.textContent = deferredPWAInstallPrompt ? 'Pasang Sekarang (1-Klik)' : 'Pasang Aplikasi';
+            }
+            if (promptArea) {
+                if (deferredPWAInstallPrompt) {
+                    promptArea.classList.remove('hidden');
+                } else {
+                    promptArea.classList.add('hidden');
+                }
+            }
+        }
+        if (window.lucide) lucide.createIcons();
+    }
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPWAInstallPrompt = e;
+        updatePWAInstallUI();
+    });
+
+    window.addEventListener('appinstalled', () => {
+        deferredPWAInstallPrompt = null;
+        isPWAInstalled = true;
+        updatePWAInstallUI();
+        showToast('Aplikasi KasirKu Pro berhasil terpasang di perangkat Anda!');
+    });
+
+    async function triggerPWAInstall() {
+        if (checkStandaloneMode()) {
+            showToast('Aplikasi KasirKu Pro sudah terpasang dan berjalan dalam Mode Aplikasi!');
+            return;
+        }
+
+        if (deferredPWAInstallPrompt) {
+            deferredPWAInstallPrompt.prompt();
+            const choiceResult = await deferredPWAInstallPrompt.userChoice;
+            if (choiceResult.outcome === 'accepted') {
+                showToast('Sedang memasang KasirKu Pro...');
+                deferredPWAInstallPrompt = null;
+                updatePWAInstallUI();
+            }
+        } else {
+            // Tampilkan panduan pemasangan lengkap untuk perangkat pengguna
+            openPWAHelpModal();
+        }
+    }
+
+    function getCleanAppUrl() {
+        return window.location.href.split('#')[0].split('?')[0];
+    }
+
+    function copyCurrentAppLink() {
+        const url = getCleanAppUrl();
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(() => {
+                showToast('Link aplikasi berhasil disalin ke clipboard!');
+            }).catch(() => fallbackCopyUrl(url));
+        } else {
+            fallbackCopyUrl(url);
+        }
+    }
+
+    function fallbackCopyUrl(text) {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+            document.execCommand('copy');
+            showToast('Link aplikasi berhasil disalin!');
+        } catch(e) {
+            prompt('Salin link aplikasi berikut:', text);
+        }
+        document.body.removeChild(textarea);
+    }
+
+    function downloadCurrentAppFile() {
+        showToast('Menyiapkan file aplikasi untuk diunduh...');
+        fetch(window.location.href)
+            .then(res => res.text())
+            .then(html => {
+                const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'KasirKu-Pro-POS.html';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                showToast('File aplikasi KasirKu-Pro-POS.html berhasil diunduh!');
+            })
+            .catch(() => {
+                const html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+                const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'KasirKu-Pro-POS.html';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                showToast('File aplikasi KasirKu-Pro-POS.html berhasil diunduh!');
+            });
+    }
+
+    function openPWAHelpModal() {
+        const modal = document.getElementById('pwa-install-modal');
+        if (modal) {
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            
+            const linkDisplay = document.getElementById('pwa-modal-link-display');
+            if (linkDisplay) {
+                linkDisplay.textContent = getCleanAppUrl();
+            }
+
+            updatePWAInstallUI();
+            if (window.lucide) lucide.createIcons();
+        }
+    }
+
+    function closePWAHelpModal() {
+        const modal = document.getElementById('pwa-install-modal');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+    }
+
+    // Monitoring status online / offline
+    window.addEventListener('offline', () => {
+        const toast = document.getElementById('offline-toast');
+        if (toast) toast.classList.remove('hidden');
+    });
+
+    window.addEventListener('online', () => {
+        const toast = document.getElementById('offline-toast');
+        if (toast) toast.classList.add('hidden');
+        showToast('🟢 Terhubung kembali ke internet.');
+    });
+
     // ================= INISIALISASI HALAMAN =================
     document.addEventListener('DOMContentLoaded', async () => {
         // 1. Tanggal Hari Ini
@@ -1802,7 +2342,25 @@
         // 3. Update UI Printer dari memori
         updatePrinterUIState();
 
-        // 4. CEK APAKAH ADA SESI LOGIN TERSIMPAN (REFRESH TIDAK LOGOUT)
+        // 4. Registrasi Service Worker PWA (Offline & Installability)
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').then((reg) => {
+                console.log('KasirKu PWA Service Worker aktif:', reg.scope);
+            }).catch((err) => {
+                console.warn('PWA SW info:', err);
+            });
+        }
+
+        // 5. Perbarui UI PWA (Mode Aplikasi Standalone / Install Button)
+        updatePWAInstallUI();
+
+        // 6. Cek status koneksi awal
+        if (!navigator.onLine) {
+            const toast = document.getElementById('offline-toast');
+            if (toast) toast.classList.remove('hidden');
+        }
+
+        // 7. CEK APAKAH ADA SESI LOGIN TERSIMPAN (REFRESH TIDAK LOGOUT)
         let savedAccount = null;
         try {
             const raw = localStorage.getItem(STORAGE_KEY_ACCOUNT);
@@ -1833,7 +2391,7 @@
             switchTab('pos');
         }
 
-        // 6. Enter Key Binding
+        // 8. Enter Key Binding & Escape Key Binding
         document.getElementById('login-password')?.addEventListener('keydown', e => { if (e.key === 'Enter') handleLoginSubmit(); });
         document.getElementById('login-username')?.addEventListener('keydown', e => { if (e.key === 'Enter') handleLoginSubmit(); });
         document.addEventListener('keydown', e => {
@@ -1841,8 +2399,26 @@
                 closeCheckoutModal();
                 closeReceiptReview();
                 closePrinterModal();
+                closePWAHelpModal();
             }
         });
+
+        // 9. Sinkronisasi Tampilan Responsive Keranjang & Layar
+        window.addEventListener('resize', () => {
+            if (window.innerWidth >= 768) {
+                const catalogPanel = document.getElementById('pos-catalog-panel');
+                const cartPanel = document.getElementById('pos-cart-panel');
+                if (catalogPanel) { catalogPanel.classList.remove('hidden'); catalogPanel.classList.add('flex'); }
+                if (cartPanel) { cartPanel.classList.remove('hidden'); cartPanel.classList.add('flex'); }
+                const floatBar = document.getElementById('mobile-floating-cart-bar');
+                if (floatBar) floatBar.classList.add('hidden');
+            } else {
+                setMobilePosView(mobilePosView);
+            }
+        });
+
+        // Inisialisasi tampilan awal
+        setMobilePosView(mobilePosView);
 
         if (window.lucide) lucide.createIcons();
     });
