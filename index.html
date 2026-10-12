@@ -272,10 +272,6 @@
                     </div>
                     <div id="category-filters" class="flex items-center space-x-1.5 shrink-0">
                         <button onclick="filterCategory('All')" class="cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all bg-brand-600 text-white shadow-xs cursor-pointer">Semua</button>
-                        <button onclick="filterCategory('Makanan')" class="cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 cursor-pointer">Makanan</button>
-                        <button onclick="filterCategory('Minuman')" class="cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 cursor-pointer">Minuman</button>
-                        <button onclick="filterCategory('Snack')" class="cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 cursor-pointer">Snack</button>
-                        <button onclick="filterCategory('Elektronik')" class="cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 cursor-pointer">Elektronik</button>
                     </div>
                 </div>
 
@@ -1634,42 +1630,69 @@
         notifyPOS('Shift kasir telah ditutup.');
     }
 
+    // Kategori mengikuti kategori yang disimpan pada halaman Inventaris Menu AE.
+    function getProductCategory(product) {
+        return String(product?.category ?? product?.kategori ?? product?.Category ?? '').trim();
+    }
+
+    function renderCategoryFilters() {
+        const holder = document.getElementById('category-filters');
+        if (!holder) return;
+        const categories = [...new Set(posProducts.map(getProductCategory).filter(Boolean))]
+            .sort((a, b) => a.localeCompare(b, 'id', { sensitivity: 'base' }));
+        if (activeCategory !== 'All' && !categories.some(c => c.toLowerCase() === activeCategory.toLowerCase())) {
+            activeCategory = 'All';
+        }
+        const buttons = [{ label: 'Semua', value: 'All' }, ...categories.map(c => ({ label: c, value: c }))];
+        holder.innerHTML = buttons.map(item => {
+            const selected = item.value === 'All' ? activeCategory === 'All' : activeCategory.toLowerCase() === item.value.toLowerCase();
+            const cls = 'cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ' +
+                (selected ? 'bg-brand-600 text-white shadow-xs' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100');
+            return `<button type="button" data-category-value="${esc(item.value)}" aria-pressed="${selected ? 'true' : 'false'}" class="${cls}">${esc(item.label)}</button>`;
+        }).join('');
+        // Delegasi klik memastikan tombol kategori hasil render ulang tetap bisa dipilih.
+        holder.onclick = function(event) {
+            const button = event.target.closest('button[data-category-value]');
+            if (!button || !holder.contains(button)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            filterCategory(button.getAttribute('data-category-value') || 'All');
+        };
+    }
+
     // Load Produk dari Spreadsheet
     async function loadProductsForAccount() {
         const grid = document.getElementById('product-grid');
         if (grid) grid.innerHTML = '<p class="col-span-full p-6 text-slate-500 text-sm">Memuat inventaris brand…</p>';
+        const brand = String(currentPOSAccount?.brand || 'LAZATTO').toUpperCase();
         try {
             const data = await posApi({ action: 'getProducts' });
-            const brand = currentPOSAccount?.brand || 'LAZATTO';
-            posProducts = (data.products || []).filter(p => String(p.brand || '').toUpperCase() === brand && p.active !== false && String(p.status || 'AKTIF').toUpperCase() !== 'NONAKTIF');
-            
-            // Simpan cache produk lokal
+            posProducts = (data.products || [])
+                .filter(p => String(p.brand || '').toUpperCase() === brand && p.active !== false && String(p.status || 'AKTIF').toUpperCase() !== 'NONAKTIF')
+                .map(p => ({ ...p, category: getProductCategory(p) }));
             try { localStorage.setItem('pos_products_cache_' + brand, JSON.stringify(posProducts)); } catch(e) {}
-            renderProducts();
-            renderInventory();
         } catch(e) {
-            // Gunakan cache jika offline
-            const brand = currentPOSAccount?.brand || 'LAZATTO';
             try {
-                posProducts = JSON.parse(localStorage.getItem('pos_products_cache_' + brand) || '[]');
+                posProducts = JSON.parse(localStorage.getItem('pos_products_cache_' + brand) || '[]')
+                    .map(p => ({ ...p, category: getProductCategory(p) }));
             } catch(err) { posProducts = []; }
-            renderProducts();
-            renderInventory();
             notifyPOS('Mode inventaris lokal: ' + e.message, false);
         }
+        renderCategoryFilters();
+        renderProducts();
+        renderInventory();
     }
 
     function renderProducts() {
         const grid = document.getElementById('product-grid');
         if (!grid) return;
         const q = (document.getElementById('search-product')?.value || '').toLowerCase();
-        const rows = posProducts.filter(p => (activeCategory === 'All' || String(p.category || '').toLowerCase() === activeCategory.toLowerCase()) && String(p.name || '').toLowerCase().includes(q));
-        
+        const rows = posProducts.filter(p => (activeCategory === 'All' || getProductCategory(p).toLowerCase() === activeCategory.toLowerCase()) && String(p.name || '').toLowerCase().includes(q));
         grid.innerHTML = rows.length ? rows.map((p, i) => `
             <button onclick="addToCartByIndex(${i})" class="text-left bg-white border border-slate-200 rounded-xl p-3 hover:border-brand-500 hover:shadow-sm transition-all flex flex-col justify-between cursor-pointer">
                 <div>
                     <div class="font-bold text-sm text-slate-800 leading-snug">${esc(p.name)}</div>
-                    <div class="text-[11px] text-slate-500 mt-1">${esc(p.category || 'Menu')}</div>
+                    <div class="text-[11px] text-slate-500 mt-1">${esc(getProductCategory(p) || 'Menu')}</div>
                 </div>
                 <div class="font-bold text-brand-600 text-sm mt-3 font-mono tabular-nums">${money(p.price)}</div>
             </button>
@@ -1692,21 +1715,18 @@
     function filterProducts() { renderProducts(); }
     function filterCategory(category) {
         activeCategory = category;
-        document.querySelectorAll('.cat-btn').forEach(b => {
-            const on = b.textContent.trim().toLowerCase() === (category === 'All' ? 'semua' : category.toLowerCase());
-            b.className = 'cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ' + (on ? 'bg-brand-600 text-white shadow-xs' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100');
-        });
+        renderCategoryFilters();
         renderProducts();
     }
 
     function addToCartByIndex(index) {
         const q = (document.getElementById('search-product')?.value || '').toLowerCase();
-        const visible = posProducts.filter(p => (activeCategory === 'All' || String(p.category || '').toLowerCase() === activeCategory.toLowerCase()) && String(p.name || '').toLowerCase().includes(q));
+        const visible = posProducts.filter(p => (activeCategory === 'All' || getProductCategory(p).toLowerCase() === activeCategory.toLowerCase()) && String(p.name || '').toLowerCase().includes(q));
         const p = visible[index];
         if (!p) return;
         const item = posCart.find(x => String(x.id) === String(p.id || p.sku || p.name));
         if (item) item.qty++;
-        else posCart.push({ id: p.id || p.sku || p.name, name: p.name, price: Number(p.price) || 0, qty: 1 });
+        else posCart.push({ id: p.id || p.sku || p.name, name: p.name, category: getProductCategory(p), price: Number(p.price) || 0, qty: 1 });
         saveCartToStorage();
         renderPOSCart();
     }
