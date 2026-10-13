@@ -922,6 +922,19 @@
         return l + ' '.repeat(spaces) + cleanRight;
     }
 
+    // Satu baris per menu untuk struk thermal 58mm (maks. 32 karakter).
+    // Beri jarak ekstra setelah qty agar tidak terlalu mepet dengan total harga.
+    function formatMenuSalesLine58mm(name, qty, total, width = 32) {
+        const clean = value => String(value ?? '').replace(/[^\x20-\x7E]/g, '');
+        const qtyText = clean('x' + qty);
+        const priceText = clean(money(total));
+        const gapBeforeQty = 1;
+        const gapAfterQty = 2;
+        const nameWidth = Math.max(1, width - qtyText.length - priceText.length - gapBeforeQty - gapAfterQty);
+        const menuName = clean(name).trim().slice(0, nameWidth).padEnd(nameWidth, ' ');
+        return (menuName + ' '.repeat(gapBeforeQty) + qtyText + ' '.repeat(gapAfterQty) + priceText).slice(0, width);
+    }
+
     function centerText58mm(text, width = 32) {
         const clean = String(text || '').replace(/[^\x20-\x7E]/g, '').trim();
         if (clean.length >= width) return clean.slice(0, width);
@@ -1405,8 +1418,7 @@
         pushLine('================================');
         if (!data.menuList.length) pushLine('(Belum ada penjualan)');
         data.menuList.forEach(m => {
-            wrapText58mm(m.name).forEach(l => pushLine(l));
-            pushLine(formatLine58mm('x' + m.qty, money(m.totalPrice)));
+            pushLine(formatMenuSalesLine58mm(m.name, m.qty, m.totalPrice));
         });
         pushLine('================================');
         pushLine(formatLine58mm('Total Porsi', String(data.totalPortions)));
@@ -1435,8 +1447,7 @@
         lines.push('================================');
         if (!data.menuList.length) lines.push('(Belum ada penjualan)');
         data.menuList.forEach(m => {
-            wrapText58mm(m.name).forEach(l => lines.push(l));
-            lines.push(formatLine58mm('x' + m.qty, money(m.totalPrice)));
+            lines.push(formatMenuSalesLine58mm(m.name, m.qty, m.totalPrice));
         });
         lines.push('================================');
         lines.push(formatLine58mm('Total Porsi', String(data.totalPortions)));
