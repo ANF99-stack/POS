@@ -899,6 +899,8 @@
     let posCart = [];
     let posTransactions = [];
     let currentShiftStartedAt = null;
+    let currentShiftId = null;
+    let closingShiftInProgress = false;
     let lastCompletedTransaction = null;
     let activeCategory = 'All';
     let autoPrintEnabled = true;
@@ -1528,6 +1530,32 @@
         return data;
     }
 
+    // Satu Shift ID dipakai selama sesi aktif, termasuk setelah halaman di-refresh.
+    function ensurePOSShiftIdentity(username) {
+        const userKey = String(username || '').trim();
+        if (!userKey) throw new Error('Username akun POS tidak tersedia.');
+        const startedKey = 'pos_shift_started_' + userKey;
+        const idKey = 'pos_shift_id_' + userKey;
+        let startedAt = 0;
+        let shiftId = '';
+        try {
+            startedAt = Number(localStorage.getItem(startedKey)) || 0;
+            if (!startedAt) {
+                startedAt = Date.now();
+                localStorage.setItem(startedKey, String(startedAt));
+            }
+            shiftId = String(localStorage.getItem(idKey) || '').trim();
+            if (!shiftId) {
+                shiftId = 'SHIFT-' + startedAt + '-' + Math.random().toString(36).slice(2, 9).toUpperCase();
+                localStorage.setItem(idKey, shiftId);
+            }
+        } catch (e) {
+            startedAt = startedAt || Date.now();
+            shiftId = shiftId || ('SHIFT-' + startedAt + '-' + Math.random().toString(36).slice(2, 9).toUpperCase());
+        }
+        return { startedAt: startedAt, shiftId: shiftId };
+    }
+
     function notifyPOS(message, bad = false) {
         const el = document.getElementById('integration-message');
         if (!el) return;
@@ -1540,7 +1568,7 @@
     // Penentuan sumber omset otomatis disesuaikan dengan tipe user kasir yang diinput
     function getAccountSalesSource(account) {
         if (!account) return 'Omset Reguler';
-        const raw = account.salesSource || account.tipeKasir || account.tipeUser || account.tipe || account.type || account.omset || account.tipeOmset || account.kategori || account.role || '';
+        const raw = account.posType || account.pos_type || account.type || account.salesSource || account.tipeKasir || account.tipeUser || account.tipe || account.omset || account.tipeOmset || account.kategori || account.role || '';
         const cleanRaw = String(raw).trim();
         if (cleanRaw) {
             const lower = cleanRaw.toLowerCase();
@@ -1638,21 +1666,30 @@
     }
 
     async function activateUserSession(account) {
-        currentPOSAccount = { ...account, brand: String(account.brand || 'LAZATTO').toUpperCase() };
-        
-        // SIMPAN SESI KE LOCALSTORAGE (AGAR REFRESH TIDAK LOGOUT)
+        const normalizedType = String(account.posType || account.pos_type || account.type || '').trim().toUpperCase();
+        currentPOSAccount = {
+            ...account,
+            brand: String(account.brand || 'LAZATTO').toUpperCase(),
+            type: normalizedType,
+            posType: normalizedType
+        };
+
+        // Simpan sesi dan identitas shift yang tetap sama saat halaman di-refresh.
         try {
+            const shiftState = ensurePOSShiftIdentity(currentPOSAccount.username);
+            currentShiftStartedAt = shiftState.startedAt;
+            currentShiftId = shiftState.shiftId;
             localStorage.setItem(STORAGE_KEY_ACCOUNT, JSON.stringify(currentPOSAccount));
             posTransactions = JSON.parse(localStorage.getItem('pos_tx_' + currentPOSAccount.username) || '[]');
-            // Setiap login setelah Tutup Shift memulai sesi penjualan baru dari nol.
-            const shiftKey = 'pos_shift_started_' + currentPOSAccount.username;
-            currentShiftStartedAt = Number(localStorage.getItem(shiftKey)) || Date.now();
-            localStorage.setItem(shiftKey, String(currentShiftStartedAt));
-        } catch(e) { posTransactions = []; currentShiftStartedAt = Date.now(); }
+        } catch(e) {
+            posTransactions = [];
+            currentShiftStartedAt = Date.now();
+            currentShiftId = 'SHIFT-' + currentShiftStartedAt + '-' + Math.random().toString(36).slice(2, 9).toUpperCase();
+        }
 
         document.getElementById('login-overlay').classList.add('hidden');
         setPOSBrand(currentPOSAccount.brand);
-        
+
         await loadProductsForAccount();
         renderPOSCart();
         renderHistory();
@@ -1661,38 +1698,129 @@
         // Kembalikan ke tab terakhir yang disimpan
         const savedTab = localStorage.getItem(STORAGE_KEY_TAB) || 'pos';
         switchTab(savedTab);
-        notifyPOS('Login berhasil · ' + currentPOSAccount.brand + ' · ' + (currentPOSAccount.resto || 'Resto'));
+        notifyPOS('Login berhasil · ' + currentPOSAccount.brand + ' · ' + (currentPOSAccount.resto || 'Resto') + ' · ' + (currentPOSAccount.posType || 'TIPE POS BELUM DIATUR'));
     }
 
-    // Tutup Shift (Satu-satunya cara keluar/logout)
-    function logoutToLogin() {
-        const closingUser = currentPOSAccount?.username;
+    // Tutup shift: sinkronkan transaksi lokal, minta GAS mengarsipkan shift,
+    // lalu logout hanya jika server mengonfirmasi penutupan berhasil.
+    async function logoutToLogin() {
+        if (!currentPOSAccount || closingShiftInProgress) return;
+
+        closingShiftInProgress = true;
+        const closeButtons = Array.from(document.querySelectorAll('button[onclick="logoutToLogin()"]'));
+        closeButtons.forEach(button => { button.disabled = true; button.dataset.oldText = button.innerHTML; });
+
+        const account = { ...currentPOSAccount };
+        const username = String(account.username || '').trim();
+        const posType = String(account.posType || account.pos_type || account.type || '').trim().toUpperCase();
+        const shiftId = String(currentShiftId || '').trim();
+
         try {
-            // Tutup sesi aktif dan hapus seluruh data sementara, tanpa menghapus riwayat transaksi.
-            localStorage.removeItem(STORAGE_KEY_ACCOUNT);
-            if (closingUser) {
-                localStorage.removeItem('pos_cart_' + closingUser);
-                localStorage.removeItem('pos_shift_started_' + closingUser);
+            if (!username) throw new Error('Username akun POS tidak tersedia.');
+            if (!shiftId) throw new Error('Shift ID tidak tersedia. Refresh halaman dan coba tutup shift kembali.');
+            if (!['EVENT', 'SATELIT'].includes(posType)) {
+                throw new Error('Tipe akun POS belum terbaca sebagai EVENT atau SATELIT. Periksa master akun POS pada Account Executive.');
             }
-            localStorage.setItem(STORAGE_KEY_TAB, 'pos');
-        } catch(e) {}
-        currentPOSAccount = null;
-        currentShiftStartedAt = null;
-        posCart = [];
-        posProducts = [];
-        pendingCheckout = null;
-        lastCompletedTransaction = null;
-        closeReceiptReview();
-        const checkoutModal = document.getElementById('checkout-modal');
-        if (checkoutModal) { checkoutModal.classList.add('hidden'); checkoutModal.classList.remove('flex'); }
-        const discountInput = document.getElementById('cart-discount-input');
-        if (discountInput) discountInput.value = '0';
-        renderPOSCart();
-        switchTab('pos');
-        document.getElementById('login-overlay').classList.remove('hidden');
-        document.getElementById('login-password').value = '';
-        document.getElementById('login-username').value = '';
-        notifyPOS('Shift ditutup. Data sesi berikutnya akan mulai dari 0; riwayat transaksi tetap tersimpan.');
+
+            // Kirim ulang transaksi lokal shift aktif. Backend mencegah duplikasi berdasarkan Invoice ID.
+            const activeShiftTransactions = (Array.isArray(posTransactions) ? posTransactions : [])
+                .filter(tx => {
+                    if (String(tx.shiftId || '') === shiftId) return true;
+                    // Migrasi transaksi lama tanpa Shift ID, hanya bila waktunya masih
+                    // berada setelah awal sesi kasir yang sedang aktif.
+                    const txTime = Date.parse(tx.dateISO || tx.timestamp || '');
+                    return !tx.shiftId && Number.isFinite(txTime) &&
+                        txTime >= (Number(currentShiftStartedAt) || 0);
+                });
+
+            for (const tx of activeShiftTransactions) {
+                const syncResult = await posApi({
+                    action: 'saveTransaction',
+                    transaction: {
+                        ...tx,
+                        shiftId: shiftId,
+                        shiftStatus: 'OPEN',
+                        posUsername: username,
+                        username: username,
+                        posType: posType
+                    }
+                });
+                if (syncResult && syncResult.status === 'error') {
+                    throw new Error(syncResult.message || 'Ada transaksi yang belum berhasil disinkronkan.');
+                }
+            }
+
+            const closeResult = await posApi({
+                action: 'closeShift',
+                shift: {
+                    id: shiftId,
+                    shiftId: shiftId,
+                    posUsername: username,
+                    username: username,
+                    posType: posType,
+                    type: posType,
+                    cashier: username,
+                    startedAt: Number(currentShiftStartedAt) || 0,
+                    resto: account.resto || '',
+                    brand: account.brand || ''
+                }
+            });
+            if (!closeResult || closeResult.status !== 'success') {
+                throw new Error(closeResult?.message || 'Server belum mengonfirmasi tutup shift.');
+            }
+
+            // Samakan status riwayat lokal dengan transaksi yang telah diarsipkan server.
+            posTransactions = (Array.isArray(posTransactions) ? posTransactions : []).map(tx => {
+                const txTime = Date.parse(tx.dateISO || tx.timestamp || '');
+                const belongsToThisShift = String(tx.shiftId || '') === shiftId ||
+                    (!tx.shiftId && Number.isFinite(txTime) && txTime >= (Number(currentShiftStartedAt) || 0));
+                return belongsToThisShift
+                    ? { ...tx, shiftId: shiftId, shiftStatus: 'CLOSED', salesSource: closeResult.salesSource || (posType === 'EVENT' ? 'Event' : 'Satelit') }
+                    : tx;
+            });
+            try { localStorage.setItem('pos_tx_' + username, JSON.stringify(posTransactions)); } catch(e) {}
+
+            const successMessage = closeResult.message ||
+                ('Shift berhasil ditutup. Omset masuk ke ' + (posType === 'EVENT' ? 'Omset Event.' : 'Omset Satelit.'));
+
+            try {
+                localStorage.removeItem(STORAGE_KEY_ACCOUNT);
+                localStorage.removeItem('pos_cart_' + username);
+                localStorage.removeItem('pos_shift_started_' + username);
+                localStorage.removeItem('pos_shift_id_' + username);
+                localStorage.setItem(STORAGE_KEY_TAB, 'pos');
+            } catch(e) {}
+
+            currentPOSAccount = null;
+            currentShiftStartedAt = null;
+            currentShiftId = null;
+            posCart = [];
+            posProducts = [];
+            pendingCheckout = null;
+            lastCompletedTransaction = null;
+            closeReceiptReview();
+            const checkoutModal = document.getElementById('checkout-modal');
+            if (checkoutModal) { checkoutModal.classList.add('hidden'); checkoutModal.classList.remove('flex'); }
+            const discountInput = document.getElementById('cart-discount-input');
+            if (discountInput) discountInput.value = '0';
+            renderPOSCart();
+            switchTab('pos');
+            document.getElementById('login-overlay').classList.remove('hidden');
+            document.getElementById('login-password').value = '';
+            document.getElementById('login-username').value = '';
+            notifyPOS(successMessage + ' Sesi kasir berhasil diakhiri.');
+        } catch(e) {
+            notifyPOS('Tutup shift gagal: ' + e.message + ' Sesi tetap aktif; periksa koneksi/data lalu coba lagi.', true);
+        } finally {
+            closingShiftInProgress = false;
+            closeButtons.forEach(button => {
+                button.disabled = false;
+                if (button.dataset.oldText) {
+                    button.innerHTML = button.dataset.oldText;
+                    delete button.dataset.oldText;
+                }
+            });
+        }
     }
 
     // Kategori mengikuti kategori yang disimpan pada halaman Inventaris Menu AE.
@@ -2080,8 +2208,11 @@
             paymentMethod: method,
             cashGiven,
             change: method === 'CASH' ? cashGiven - total : 0,
-            shiftId: '',
-            shiftStatus: 'OPEN'
+            shiftId: currentShiftId || '',
+            shiftStatus: 'OPEN',
+            posUsername: currentPOSAccount.username,
+            username: currentPOSAccount.username,
+            posType: String(currentPOSAccount.posType || currentPOSAccount.type || '').toUpperCase()
         };
 
         try {
@@ -2475,11 +2606,21 @@
         } catch(e) {}
 
         if (savedAccount && savedAccount.username) {
-            currentPOSAccount = savedAccount;
+            const normalizedType = String(savedAccount.posType || savedAccount.pos_type || savedAccount.type || '').trim().toUpperCase();
+            currentPOSAccount = { ...savedAccount, type: normalizedType, posType: normalizedType };
+            try {
+                const shiftState = ensurePOSShiftIdentity(currentPOSAccount.username);
+                currentShiftStartedAt = shiftState.startedAt;
+                currentShiftId = shiftState.shiftId;
+            } catch(e) {
+                currentShiftStartedAt = Date.now();
+                currentShiftId = 'SHIFT-' + currentShiftStartedAt + '-' + Math.random().toString(36).slice(2, 9).toUpperCase();
+            }
             document.getElementById('login-overlay').classList.add('hidden');
             setPOSBrand(currentPOSAccount.brand);
 
             try {
+                localStorage.setItem(STORAGE_KEY_ACCOUNT, JSON.stringify(currentPOSAccount));
                 posTransactions = JSON.parse(localStorage.getItem('pos_tx_' + currentPOSAccount.username) || '[]');
                 posCart = JSON.parse(localStorage.getItem('pos_cart_' + currentPOSAccount.username) || '[]');
             } catch(e) {}
