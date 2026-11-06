@@ -205,15 +205,6 @@
         <!-- Printer 58mm Status & Role Badge -->
         <div class="flex items-center space-x-2">
             <!-- PWA Install Button / Standalone Badge -->
-            <button onclick="triggerPWAInstall()" id="header-install-btn" class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100 cursor-pointer shadow-xs" title="Pasang Aplikasi KasirKu Pro di Perangkat">
-                <i data-lucide="download" class="w-3.5 h-3.5 text-indigo-600" id="header-install-icon"></i>
-                <span id="header-install-text" class="hidden sm:inline">Install App</span>
-            </button>
-            <div id="header-installed-badge" class="hidden items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-[11px] font-semibold text-emerald-700 shadow-xs" title="Aplikasi Berjalan dalam Mode PWA Terpasang">
-                <i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-emerald-600"></i>
-                <span class="hidden md:inline">Mode App</span>
-            </div>
-
             <!-- Bluetooth Printer Quick Badge -->
             <button onclick="openPrinterModal()" id="header-printer-btn" class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200 cursor-pointer">
                 <i data-lucide="bluetooth" class="w-3.5 h-3.5 text-slate-500" id="header-bt-icon"></i>
@@ -233,9 +224,7 @@
                 <div class="text-left hidden sm:block">
                     <div class="text-[9px] text-slate-400 uppercase font-semibold leading-none">Login</div>
                     <div class="text-[11px] font-bold text-slate-800 leading-tight max-w-[100px] truncate" id="current-role-badge">Kasir</div>
-                </div>
-                <button onclick="logoutToLogin()" class="text-[10px] bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 font-semibold px-2 py-1 rounded shadow-xs transition-all cursor-pointer">
-                    Tutup Shift
+               
                 </button>
             </div>
         </div>
@@ -527,44 +516,6 @@
                             <i data-lucide="bluetooth-off" class="w-4 h-4"></i>
                             <span>Putuskan</span>
                         </button>
-                    </div>
-                </div>
-
-                <!-- PWA App Installation & Offline Status Card -->
-                <div id="dashboard-pwa-card" class="bg-gradient-to-r from-indigo-50/80 via-white to-purple-50/40 p-4 sm:p-6 rounded-2xl border border-indigo-100 shadow-sm">
-                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div class="flex items-start md:items-center space-x-3.5">
-                            <div class="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-indigo-500/20">
-                                <i data-lucide="smartphone" class="w-6 h-6"></i>
-                            </div>
-                            <div>
-                                <div class="flex items-center gap-2">
-                                    <h3 class="font-bold text-base text-slate-900">Aplikasi KasirKu Pro (PWA)</h3>
-                                    <span id="dashboard-pwa-badge" class="text-[10px] bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full border border-indigo-200">
-                                        Siap Dipasang
-                                    </span>
-                                </div>
-                                <p class="text-xs text-slate-600 mt-0.5">Jadikan aplikasi mandiri di HP Android, iPhone, iPad, atau Laptop/PC. Lebih cepat, responsif, dan siap transaksi offline.</p>
-                            </div>
-                        </div>
-                        <div class="flex flex-wrap items-center gap-2 shrink-0">
-                            <button onclick="triggerPWAInstall()" id="dashboard-pwa-btn" class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 flex items-center gap-1.5 transition-all cursor-pointer">
-                                <i data-lucide="smartphone" class="w-4 h-4"></i>
-                                <span id="dashboard-pwa-btn-text">Pasang Aplikasi Sekarang</span>
-                            </button>
-                            <button onclick="downloadCurrentAppFile()" class="px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer" title="Download file HTML aplikasi">
-                                <i data-lucide="download" class="w-4 h-4 text-brand-600"></i>
-                                <span>Download File (.html)</span>
-                            </button>
-                            <button onclick="copyCurrentAppLink()" class="px-3 py-2.5 rounded-xl border border-indigo-200 bg-indigo-50/60 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer" title="Salin link aplikasi">
-                                <i data-lucide="copy" class="w-4 h-4 text-indigo-600"></i>
-                                <span>Salin Link</span>
-                            </button>
-                            <button onclick="openPWAHelpModal()" class="px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer">
-                                <i data-lucide="help-circle" class="w-4 h-4 text-slate-400"></i>
-                                <span>Panduan Pasang</span>
-                            </button>
-                        </div>
                     </div>
                 </div>
 
@@ -1109,78 +1060,91 @@
         '0000ae30-0000-1000-8000-00805f9b34fb'
     ];
 
+    // Simpan referensi perangkat hanya pada konteks halaman; saat reload, ambil ulang
+    // perangkat yang sebelumnya sudah mendapat izin menggunakan navigator.bluetooth.getDevices().
+    let btReconnectInProgress = false;
+
+    async function attachBluetoothPrinter(device, silent = false) {
+        if (!device || !device.gatt) throw new Error('Perangkat Bluetooth tidak valid.');
+        device.addEventListener('gattserverdisconnected', () => {
+            btConnected = false;
+            btCharacteristic = null;
+            updatePrinterUIState();
+            if (!silent) notifyPOS('Koneksi printer Bluetooth terputus. Mencoba sambungkan kembali…');
+            // Reconnect otomatis setelah printer/device kembali tersedia.
+            setTimeout(() => reconnectSavedBluetoothPrinter(), 1200);
+        });
+
+        const server = await device.gatt.connect();
+        let foundChar = null;
+        for (const sUuid of KNOWN_PRINTER_SERVICES) {
+            try {
+                const service = await server.getPrimaryService(sUuid);
+                const chars = await service.getCharacteristics();
+                foundChar = chars.find(c => c.properties.writeWithoutResponse || c.properties.write) || null;
+            } catch (e) {}
+            if (foundChar) break;
+        }
+        if (!foundChar) {
+            try {
+                for (const service of await server.getPrimaryServices()) {
+                    const chars = await service.getCharacteristics();
+                    foundChar = chars.find(c => c.properties.writeWithoutResponse || c.properties.write) || null;
+                    if (foundChar) break;
+                }
+            } catch (e) {}
+        }
+        if (!foundChar) throw new Error('Printer terhubung namun characteristic tulis (ESC/POS) tidak ditemukan.');
+
+        btDevice = device;
+        btCharacteristic = foundChar;
+        btConnected = true;
+        btDeviceName = device.name || localStorage.getItem(STORAGE_KEY_PRINTER_NAME) || 'BT Printer 58mm';
+        try {
+            localStorage.setItem(STORAGE_KEY_PRINTER_NAME, btDeviceName);
+            if (device.id) localStorage.setItem(STORAGE_KEY_PRINTER_ID, device.id);
+        } catch (e) {}
+        updatePrinterUIState();
+        if (!silent) notifyPOS('Printer Bluetooth 58mm terhubung: ' + btDeviceName);
+        return true;
+    }
+
+    async function reconnectSavedBluetoothPrinter() {
+        if (btReconnectInProgress || btConnected || !navigator.bluetooth || !navigator.bluetooth.getDevices) return false;
+        btReconnectInProgress = true;
+        try {
+            const savedId = localStorage.getItem(STORAGE_KEY_PRINTER_ID);
+            const savedName = localStorage.getItem(STORAGE_KEY_PRINTER_NAME);
+            if (!savedId && !savedName) return false;
+            const devices = await navigator.bluetooth.getDevices();
+            const device = devices.find(d => (savedId && d.id === savedId) || (savedName && d.name === savedName));
+            if (!device) return false; // Belum pernah diberi izin; user perlu memilih secara manual.
+            await attachBluetoothPrinter(device, true);
+            return true;
+        } catch (e) {
+            console.warn('Auto-reconnect Bluetooth belum berhasil:', e);
+            return false;
+        } finally {
+            btReconnectInProgress = false;
+        }
+    }
+
     async function connectBluetoothThermal58mm() {
         if (!navigator.bluetooth) {
-            notifyPOS('Web Bluetooth tidak didukung di browser ini. Gunakan Chrome/Edge di Android/PC atau dialog cetak browser.', true);
+            notifyPOS('Web Bluetooth tidak didukung di browser ini. Gunakan Chrome/Edge atau dialog cetak browser.', true);
             return;
         }
         try {
+            // Jika browser masih menyimpan izin perangkat, coba reconnect tanpa dialog.
+            if (await reconnectSavedBluetoothPrinter()) return;
             notifyPOS('Membuka daftar Bluetooth… Pilih printer thermal 58mm Anda.');
             const device = await navigator.bluetooth.requestDevice({
                 acceptAllDevices: true,
                 optionalServices: KNOWN_PRINTER_SERVICES
             });
-            if (!device) return;
-
-            device.addEventListener('gattserverdisconnected', () => {
-                btConnected = false;
-                btCharacteristic = null;
-                updatePrinterUIState();
-                notifyPOS('Koneksi printer Bluetooth terputus.');
-            });
-
-            const server = await device.gatt.connect();
-            let foundChar = null;
-
-            // Cari characteristic writable
-            for (const sUuid of KNOWN_PRINTER_SERVICES) {
-                try {
-                    const service = await server.getPrimaryService(sUuid);
-                    const chars = await service.getCharacteristics();
-                    for (const c of chars) {
-                        if (c.properties.writeWithoutResponse || c.properties.write) {
-                            foundChar = c;
-                            break;
-                        }
-                    }
-                } catch(e) {}
-                if (foundChar) break;
-            }
-
-            if (!foundChar) {
-                try {
-                    const services = await server.getPrimaryServices();
-                    for (const s of services) {
-                        const chars = await s.getCharacteristics();
-                        for (const c of chars) {
-                            if (c.properties.writeWithoutResponse || c.properties.write) {
-                                foundChar = c;
-                                break;
-                            }
-                        }
-                        if (foundChar) break;
-                    }
-                } catch(e) {}
-            }
-
-            if (!foundChar) {
-                throw new Error('Printer terhubung namun characteristic tulis (ESC/POS) tidak ditemukan.');
-            }
-
-            btDevice = device;
-            btCharacteristic = foundChar;
-            btConnected = true;
-            btDeviceName = device.name || 'BT Printer 58mm';
-
-            try {
-                localStorage.setItem(STORAGE_KEY_PRINTER_NAME, btDeviceName);
-                if (device.id) localStorage.setItem(STORAGE_KEY_PRINTER_ID, device.id);
-            } catch(e) {}
-
-            updatePrinterUIState();
-            notifyPOS('Printer Bluetooth 58mm terhubung: ' + btDeviceName);
-        } catch(err) {
-            if (String(err).includes('User cancelled')) {
+            if (device) await attachBluetoothPrinter(device, false);
+        } catch (err) {
+            if (String(err).includes('User cancelled') || String(err).includes('cancelled')) {
                 notifyPOS('Pemilihan printer Bluetooth dibatalkan.', false);
             } else {
                 notifyPOS('Gagal koneksi Bluetooth: ' + (err.message || err), true);
@@ -1640,16 +1604,8 @@
                 else throw new Error(auth.message || 'Username atau password tidak valid.');
             } catch(err) { authError = err; }
 
-            if (!account) {
-                try {
-                    const result = await posApi({ action: 'listPosAccounts' });
-                    const accounts = result.accounts || [];
-                    account = accounts.find(a => String(a.username || '').trim().toLowerCase() === username.toLowerCase() &&
-                        String(a.password ?? a.pass ?? a.plainPassword ?? a.plaintextPassword ?? '') === password &&
-                        String(a.active ?? 'AKTIF').toUpperCase() !== 'NONAKTIF' && String(a.active ?? 'AKTIF').toUpperCase() !== 'FALSE') || null;
-                } catch(e) {}
-            }
-
+            // Autentikasi hanya melalui verifyPosLogin di server. Jangan fallback
+            // ke listPosAccounts/client-side password matching.
             if (!account) throw new Error(authError?.message || 'Username atau password tidak valid. Pastikan akun aktif.');
 
             await activateUserSession(account);
@@ -1708,7 +1664,15 @@
 
         closingShiftInProgress = true;
         const closeButtons = Array.from(document.querySelectorAll('button[onclick="logoutToLogin()"]'));
-        closeButtons.forEach(button => { button.disabled = true; button.dataset.oldText = button.innerHTML; });
+        closeButtons.forEach(button => {
+            // Kunci semua tombol Tutup Shift sekaligus agar klik berulang tidak
+            // mengirim request closeShift/saveTransaction secara bersamaan.
+            button.disabled = true;
+            button.dataset.oldText = button.innerHTML;
+            button.classList.add('opacity-70', 'cursor-wait');
+            button.setAttribute('aria-busy', 'true');
+            button.innerHTML = '<span class="inline-block w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin shrink-0" aria-hidden="true"></span><span>Memproses Tutup Shift...</span>';
+        });
 
         const account = { ...currentPOSAccount };
         const username = String(account.username || '').trim();
@@ -1815,6 +1779,8 @@
             closingShiftInProgress = false;
             closeButtons.forEach(button => {
                 button.disabled = false;
+                button.classList.remove('opacity-70', 'cursor-wait');
+                button.removeAttribute('aria-busy');
                 if (button.dataset.oldText) {
                     button.innerHTML = button.dataset.oldText;
                     delete button.dataset.oldText;
@@ -2577,8 +2543,13 @@
         autoPrintEnabled = (savedAuto !== '0');
         toggleAutoPrint(autoPrintEnabled);
 
-        // 3. Update UI Printer dari memori
+        // 3. Update UI printer dan pulihkan koneksi dari izin browser yang tersimpan
         updatePrinterUIState();
+        if (navigator.bluetooth && navigator.bluetooth.getDevices) {
+            reconnectSavedBluetoothPrinter().then(connected => {
+                if (connected) notifyPOS('Printer Bluetooth tersambung kembali otomatis: ' + (btDeviceName || 'BT 58mm'));
+            });
+        }
 
         // 4. Registrasi Service Worker PWA (Offline & Installability)
         if ('serviceWorker' in navigator) {
@@ -2604,6 +2575,29 @@
             const raw = localStorage.getItem(STORAGE_KEY_ACCOUNT);
             if (raw) savedAccount = JSON.parse(raw);
         } catch(e) {}
+
+        // Validasi sesi tersimpan langsung ke GAS setiap kali POS dibuka/refresh.
+        // Jika akun sudah dihapus/nonaktif atau server tidak dapat diverifikasi,
+        // hapus sesi lokal dan tampilkan form login (fail closed).
+        if (savedAccount && savedAccount.username) {
+            try {
+                const sessionCheck = await posApi({
+                    action: 'verifyPosSession',
+                    username: String(savedAccount.username || '').trim()
+                });
+                if (sessionCheck.status !== 'success' || !sessionCheck.user) {
+                    throw new Error(sessionCheck.message || 'Sesi akun tidak valid.');
+                }
+                savedAccount = sessionCheck.user;
+            } catch (sessionError) {
+                console.warn('Validasi sesi POS ditolak:', sessionError.message);
+                try { localStorage.removeItem(STORAGE_KEY_ACCOUNT); } catch(e) {}
+                savedAccount = null;
+                currentPOSAccount = null;
+                currentShiftStartedAt = null;
+                currentShiftId = null;
+            }
+        }
 
         if (savedAccount && savedAccount.username) {
             const normalizedType = String(savedAccount.posType || savedAccount.pos_type || savedAccount.type || '').trim().toUpperCase();
