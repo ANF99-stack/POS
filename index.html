@@ -3006,11 +3006,15 @@
       <div class="rounded-xl bg-indigo-50 p-3 text-sm"><b id="online-order-outlet-name">Outlet</b><div class="text-xs text-indigo-700 mt-1">Outlet diturunkan dari akun POS aktif.</div></div>
       <div><label class="block text-xs font-bold mb-1">URL Form Online Order</label><input id="online-order-base-url" type="url" value="https://anf99-stack.github.io/ONLINE_ORDER" readonly class="w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-700"><p class="mt-1 text-xs text-slate-500">URL tetap dari GitHub Pages. Link QR akan ditambahkan username outlet dan URL backend POS secara otomatis.</p></div>
       <div><label class="block text-xs font-bold mb-1">Kode outlet pada QR</label><input id="online-order-outlet-code" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" readonly></div>
+      <div class="rounded-lg border border-emerald-200 bg-emerald-50 p-2.5"><label class="flex items-center gap-2 text-sm font-semibold text-emerald-800"><input type="checkbox" id="oo-active" checked> Aktifkan Online Order untuk outlet ini</label><p class="mt-1 text-[11px] text-emerald-700">Jika aktif, pelanggan dapat membuka form dan mengirim pesanan ke outlet ini.</p></div>
       <div><label class="block text-xs font-bold mb-2">Jenis Order tersedia</label><div class="grid grid-cols-3 gap-2 text-sm"><label class="rounded-lg border p-2"><input type="checkbox" id="oo-pickup" checked> Pickup</label><label class="rounded-lg border p-2"><input type="checkbox" id="oo-dinein" checked> Dine In</label><label class="rounded-lg border p-2"><input type="checkbox" id="oo-delivery"> Delivery</label></div></div>
       <div><label class="block text-xs font-bold mb-2">Metode Pembayaran</label><div class="grid grid-cols-3 gap-2 text-sm"><label class="rounded-lg border p-2"><input type="checkbox" id="oo-cash" checked> Cash</label><label class="rounded-lg border p-2"><input type="checkbox" id="oo-qris" checked> QRIS</label><label class="rounded-lg border p-2"><input type="checkbox" id="oo-transfer"> Transfer</label></div></div>
-      <div class="flex gap-2"><button type="button" onclick="saveOnlineOrderConfig()" class="flex-1 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-bold text-white">Simpan Pengaturan</button><button type="button" id="online-order-generate-btn" onclick="generateOnlineOrderQR()" class="flex-1 rounded-lg bg-slate-800 px-3 py-2 text-sm font-bold text-white">Generate QR</button></div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2"><div><label for="oo-delivery-fee" class="block text-xs font-bold mb-1">Biaya Delivery (Rp)</label><input type="number" min="0" step="500" id="oo-delivery-fee" value="0" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></div><div><label for="oo-qris-image-url" class="block text-xs font-bold mb-1">URL Gambar QRIS</label><input type="url" id="oo-qris-image-url" placeholder="https://.../qris.png" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></div></div>
+      <p class="text-[11px] text-slate-500">URL gambar QRIS wajib diisi jika metode QRIS diaktifkan. Gunakan tautan gambar yang dapat dibuka pelanggan.</p>
+      <div><label for="oo-confirm-password" class="block text-xs font-bold mb-1">Konfirmasi Password POS untuk Simpan ke Server</label><input type="password" id="oo-confirm-password" autocomplete="current-password" placeholder="Masukkan password akun POS" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></div>
+      <div class="flex gap-2"><button type="button" id="online-order-save-btn" onclick="saveOnlineOrderConfig()" class="flex-1 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-bold text-white">Simpan Pengaturan</button><button type="button" id="online-order-generate-btn" onclick="generateOnlineOrderQR()" class="flex-1 rounded-lg bg-slate-800 px-3 py-2 text-sm font-bold text-white">Generate QR</button></div>
       <div id="online-order-qr-wrap" class="hidden rounded-xl border bg-white p-4 text-center"><div id="online-order-qr" class="mx-auto flex justify-center"></div><p id="online-order-link" class="mt-3 break-all text-xs text-slate-500"></p><div class="mt-3 flex gap-2"><button onclick="downloadOnlineOrderQR()" class="flex-1 rounded-lg border px-3 py-2 text-sm font-semibold">Download QR PNG</button><button onclick="copyOnlineOrderLink()" class="flex-1 rounded-lg border px-3 py-2 text-sm font-semibold">Copy Link</button></div></div>
-      <div class="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">Form dipublikasikan di GitHub Pages. QR memakai username POS outlet dan tetap mengirim permintaan ke URL backend POS yang sama.</div>
+      <div class="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">Pengaturan disimpan ke OnlineOrderConfig pada Spreadsheet POS setelah password diverifikasi. QR memakai username POS outlet dan URL backend POS yang sama.</div>
     </div>
   </div>
 </div>
@@ -3019,13 +3023,68 @@
 function onlineOrderSlug(value){return String(value||'OUTLET').trim().toUpperCase().replace(/[^A-Z0-9]+/g,'_').replace(/^_|_$/g,'')||'OUTLET'}
 function onlineOrderConfigKey(){return 'ae_pos_online_order_cfg_'+onlineOrderSlug(currentPOSAccount?.username||currentPOSAccount?.resto||'OUTLET')}
 function onlineOrderOutletName(){return String(currentPOSAccount?.resto||currentPOSAccount?.outlet||currentPOSAccount?.username||'Outlet POS').trim()}
-function openOnlineOrderModal(){if(!currentPOSAccount){notifyPOS('Login POS terlebih dahulu.',true);return;}const modal=document.getElementById('online-order-modal');modal.classList.remove('hidden');modal.classList.add('flex');document.getElementById('online-order-outlet-name').textContent=onlineOrderOutletName();document.getElementById('online-order-outlet-code').value=String(currentPOSAccount.username||'').trim();document.getElementById('online-order-base-url').value=ONLINE_ORDER_FORM_URL;const cfg=JSON.parse(localStorage.getItem(onlineOrderConfigKey())||'{}');['pickup','dinein','delivery','cash','qris','transfer'].forEach(k=>{const el=document.getElementById('oo-'+k);if(el)el.checked=cfg[k]!==undefined?!!cfg[k]:['pickup','dinein','cash','qris'].includes(k)});if(window.lucide)lucide.createIcons();}
+function openOnlineOrderModal(){
+  if(!currentPOSAccount){notifyPOS('Login POS terlebih dahulu.',true);return;}
+  const modal=document.getElementById('online-order-modal');
+  modal.classList.remove('hidden');modal.classList.add('flex');
+  document.getElementById('online-order-outlet-name').textContent=onlineOrderOutletName();
+  document.getElementById('online-order-outlet-code').value=String(currentPOSAccount.username||'').trim();
+  document.getElementById('online-order-base-url').value=ONLINE_ORDER_FORM_URL;
+  const cfg=JSON.parse(localStorage.getItem(onlineOrderConfigKey())||'{}');
+  ['pickup','dinein','delivery','cash','qris','transfer'].forEach(k=>{
+    const el=document.getElementById('oo-'+k);
+    if(el)el.checked=cfg[k]!==undefined?!!cfg[k]:['pickup','dinein','cash','qris'].includes(k);
+  });
+  const activeEl=document.getElementById('oo-active');if(activeEl)activeEl.checked=cfg.active!==false;
+  const feeEl=document.getElementById('oo-delivery-fee');if(feeEl)feeEl.value=Number(cfg.deliveryFee)||0;
+  const qrisEl=document.getElementById('oo-qris-image-url');if(qrisEl)qrisEl.value=String(cfg.qrisImageUrl||'');
+  const passwordEl=document.getElementById('oo-confirm-password');if(passwordEl)passwordEl.value='';
+  if(window.lucide)lucide.createIcons();
+}
 function closeOnlineOrderModal(){const m=document.getElementById('online-order-modal');m.classList.add('hidden');m.classList.remove('flex')}
-function saveOnlineOrderConfig(options={}){
-  const cfg={baseUrl:ONLINE_ORDER_FORM_URL,pickup:document.getElementById('oo-pickup').checked,dinein:document.getElementById('oo-dinein').checked,delivery:document.getElementById('oo-delivery').checked,cash:document.getElementById('oo-cash').checked,qris:document.getElementById('oo-qris').checked,transfer:document.getElementById('oo-transfer').checked};
-  localStorage.setItem(onlineOrderConfigKey(),JSON.stringify(cfg));
-  if(!options.silent) notifyPOS('Pengaturan Online Order tersimpan di perangkat ini.');
-  return cfg;
+async function saveOnlineOrderConfig(options={}){
+  const username=String(currentPOSAccount?.username||'').trim();
+  const passwordEl=document.getElementById('oo-confirm-password');
+  const password=String(passwordEl?.value||'');
+  if(!username){notifyPOS('Username POS tidak ditemukan. Silakan login ulang.',true);return false;}
+  if(!password){notifyPOS('Masukkan password POS untuk menyimpan pengaturan ke server.',true);passwordEl?.focus();return false;}
+  const cfg={
+    baseUrl:ONLINE_ORDER_FORM_URL,
+    pickup:document.getElementById('oo-pickup').checked,
+    dinein:document.getElementById('oo-dinein').checked,
+    delivery:document.getElementById('oo-delivery').checked,
+    cash:document.getElementById('oo-cash').checked,
+    qris:document.getElementById('oo-qris').checked,
+    transfer:document.getElementById('oo-transfer').checked,
+    active:document.getElementById('oo-active').checked,
+    deliveryFee:Math.max(0,Number(document.getElementById('oo-delivery-fee').value)||0),
+    qrisImageUrl:String(document.getElementById('oo-qris-image-url').value||'').trim()
+  };
+  if(!cfg.pickup&&!cfg.dinein&&!cfg.delivery){notifyPOS('Aktifkan minimal satu jenis order.',true);return false;}
+  if(!cfg.cash&&!cfg.qris&&!cfg.transfer){notifyPOS('Aktifkan minimal satu metode pembayaran.',true);return false;}
+  if(cfg.qris&&!cfg.qrisImageUrl){notifyPOS('Isi URL Gambar QRIS atau nonaktifkan metode QRIS.',true);document.getElementById('oo-qris-image-url')?.focus();return false;}
+  const button=document.getElementById('online-order-save-btn');
+  const original=button?.textContent||'Simpan Pengaturan';
+  if(button){button.disabled=true;button.textContent='Menyimpan ke server...';button.classList.add('opacity-60');}
+  try{
+    const result=await posApi({
+      action:'saveOnlineOrderConfig',username:username,password:password,outletCode:username,
+      pickup:cfg.pickup,dinein:cfg.dinein,delivery:cfg.delivery,
+      cash:cfg.cash,qris:cfg.qris,transfer:cfg.transfer,
+      deliveryFee:cfg.deliveryFee,qrisImageUrl:cfg.qrisImageUrl,active:cfg.active
+    });
+    if(result.status!=='success'||result.ok===false)throw new Error(result.message||'Pengaturan tidak berhasil disimpan.');
+    cfg.savedToServer=true;cfg.savedAt=new Date().toISOString();
+    localStorage.setItem(onlineOrderConfigKey(),JSON.stringify(cfg));
+    if(passwordEl)passwordEl.value='';
+    notifyPOS(result.message||'Pengaturan Online Order berhasil disimpan ke Spreadsheet POS.');
+    return true;
+  }catch(err){
+    notifyPOS('Gagal menyimpan pengaturan ke server: '+(err?.message||err),true);
+    return false;
+  }finally{
+    if(button){button.disabled=false;button.textContent=original;button.classList.remove('opacity-60');}
+  }
 }
 function getOnlineOrderUrl(){
   const username=String(currentPOSAccount?.username||'').trim();
@@ -3067,7 +3126,12 @@ async function ensureOnlineOrderQRCodeLibrary(){
 async function generateOnlineOrderQR(){
   const link=getOnlineOrderUrl();
   if(!link) return;
-  saveOnlineOrderConfig({silent:true});
+  let savedConfig={};
+  try{savedConfig=JSON.parse(localStorage.getItem(onlineOrderConfigKey())||'{}');}catch(e){}
+  if(savedConfig.savedToServer!==true || savedConfig.active!==true){
+    notifyPOS('Simpan dan aktifkan pengaturan Online Order ke server terlebih dahulu.',true);
+    return;
+  }
   const box=document.getElementById('online-order-qr');
   const wrap=document.getElementById('online-order-qr-wrap');
   const button=document.getElementById('online-order-generate-btn');
