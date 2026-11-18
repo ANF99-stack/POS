@@ -88,6 +88,302 @@
             }
         }
         
+
+
+        /* Fix checkout footer clipping: main must use remaining flex height, not full viewport */
+        body > main { height: auto !important; flex: 1 1 0% !important; min-height: 0 !important; }
+        #tab-pos { height: 100% !important; min-height: 0 !important; }
+        @media (max-width: 767px) {
+            #pos-cart-panel { height: 100% !important; min-height: 0 !important; overflow: hidden !important; }
+            #pos-cart-panel > div:last-child { flex-shrink: 0 !important; padding-bottom: max(8px, env(safe-area-inset-bottom, 8px)) !important; }
+            #checkout-btn { display: flex !important; visibility: visible !important; opacity: 1 !important; min-height: 42px !important; }
+        }
+
+
+
+
+        /* V5: compact and aligned header for landscape/tablet */
+        @media (orientation: landscape) and (max-width: 1100px) {
+            header.bg-white.border-b {
+                height: 52px !important;
+                min-height: 52px !important;
+                padding-left: 10px !important;
+                padding-right: 10px !important;
+                gap: 8px !important;
+                justify-content: flex-start !important;
+                overflow: hidden !important;
+            }
+            header.bg-white.border-b > div:first-child {
+                display: flex !important;
+                flex-direction: row !important;
+                align-items: center !important;
+                gap: 6px !important;
+                flex: 0 0 auto !important;
+                min-width: 70px !important;
+            }
+            header.bg-white.border-b > div:first-child h1 {
+                font-size: 13px !important;
+                line-height: 1 !important;
+                white-space: nowrap !important;
+            }
+            #brand-badge-header { display: none !important; }
+            header.bg-white.border-b nav {
+                flex: 1 1 auto !important;
+                min-width: 0 !important;
+                justify-content: center !important;
+                gap: 2px !important;
+                padding: 3px !important;
+                overflow: hidden !important;
+            }
+            header.bg-white.border-b nav .tab-btn {
+                padding: 5px 8px !important;
+                flex: 0 1 auto !important;
+                min-width: 0 !important;
+                white-space: nowrap !important;
+            }
+            header.bg-white.border-b nav .tab-btn span {
+                display: inline !important;
+                font-size: 11px !important;
+            }
+            #header-online-order-btn {
+                flex: 0 0 auto !important;
+                padding: 6px 8px !important;
+                white-space: nowrap !important;
+            }
+            #header-online-order-btn span { display: inline !important; font-size: 11px !important; }
+            #header-printer-btn {
+                flex: 0 0 auto !important;
+                padding: 6px 8px !important;
+                max-width: 92px !important;
+            }
+            #header-printer-status-text { display: inline !important; max-width: 48px !important; font-size: 10px !important; }
+            #header-auto-badge { display: none !important; }
+            header.bg-white.border-b > div:last-child {
+                flex: 0 0 auto !important;
+                min-width: 0 !important;
+                gap: 5px !important;
+            }
+            header.bg-white.border-b > div:last-child .text-left { display: none !important; }
+            header.bg-white.border-b > div:last-child {
+                padding: 5px 7px !important;
+            }
+        }
+        @media (orientation: landscape) and (max-width: 767px) {
+            header.bg-white.border-b nav .tab-btn span { display: none !important; }
+            header.bg-white.border-b nav .tab-btn { padding: 6px 7px !important; }
+            #header-online-order-btn span { display: none !important; }
+            #header-printer-status-text { display: none !important; }
+            header.bg-white.border-b > div:first-child h1 { font-size: 12px !important; }
+        }
+
+        /* V4 responsive panel visibility: do not force cart visible in catalog view */
+        @media (max-width: 767px) {
+            #pos-cart-panel.hidden { display: none !important; }
+            #pos-cart-panel.flex { display: flex !important; }
+            #pos-catalog-panel.hidden { display: none !important; }
+            #pos-catalog-panel.flex { display: flex !important; }
+            #tab-pos { flex: 1 1 auto !important; height: auto !important; min-height: 0 !important; }
+            #pos-catalog-panel, #pos-cart-panel {
+                flex: 1 1 0% !important;
+                width: 100% !important;
+                height: 100% !important;
+                max-height: 100% !important;
+                min-height: 0 !important;
+                overflow: hidden !important;
+            }
+            #pos-cart-panel {
+                display: flex !important;
+                flex-direction: column !important;
+                position: relative !important;
+            }
+            #cart-items {
+                flex: 1 1 0% !important;
+                min-height: 0 !important;
+                overflow-y: auto !important;
+                padding-bottom: 12px !important;
+            }
+            #pos-cart-panel > div:last-child {
+                position: sticky !important;
+                bottom: 0 !important;
+                left: auto !important;
+                right: auto !important;
+                flex: 0 0 auto !important;
+                width: 100% !important;
+                max-height: none !important;
+                margin-top: 0 !important;
+                padding: 6px 8px max(8px, env(safe-area-inset-bottom, 8px)) !important;
+                box-sizing: border-box !important;
+                overflow: visible !important;
+                background: #f8fafc !important;
+                z-index: 30 !important;
+            }
+            #checkout-btn {
+                display: flex !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+                position: static !important;
+                width: 100% !important;
+                height: 42px !important;
+                min-height: 42px !important;
+                flex: 0 0 42px !important;
+                margin-top: 4px !important;
+            }
+        }
+        @media (orientation: landscape) and (max-width: 767px) {
+            /* Phone landscape: retain single-panel navigation, maximize usable height */
+            #pos-cart-panel, #pos-catalog-panel { min-height: 0 !important; }
+            #pos-cart-panel > div:last-child {
+                padding: 4px 7px max(4px, env(safe-area-inset-bottom, 4px)) !important;
+            }
+            #checkout-btn { height: 36px !important; min-height: 36px !important; flex-basis: 36px !important; }
+        }
+
+        /* V3: pin cart summary and checkout to the bottom of mobile cart panel */
+        @media (max-width: 767px) {
+            #pos-cart-panel {
+                position: relative !important;
+                overflow: hidden !important;
+                min-height: 0 !important;
+            }
+            #cart-items {
+                padding-bottom: 170px !important;
+            }
+            #pos-cart-panel > div:last-child {
+                position: absolute !important;
+                left: 0 !important;
+                right: 0 !important;
+                bottom: 0 !important;
+                width: 100% !important;
+                max-height: none !important;
+                overflow: visible !important;
+                box-sizing: border-box !important;
+                padding: 7px 9px max(8px, env(safe-area-inset-bottom, 8px)) !important;
+                background: #f8fafc !important;
+                border-top: 1px solid #e2e8f0 !important;
+                box-shadow: 0 -5px 12px rgba(15,23,42,.06) !important;
+            }
+            #checkout-btn {
+                position: static !important;
+                transform: none !important;
+                display: flex !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+                height: 42px !important;
+                min-height: 42px !important;
+                margin-top: 4px !important;
+            }
+        }
+
+        /* Checkout visibility: compact cart summary on mobile */
+        @media (max-width: 767px) {
+            #pos-cart-panel {
+                display: flex !important;
+                flex-direction: column !important;
+                position: relative !important;
+                height: 100% !important;
+                max-height: 100% !important;
+                min-height: 0 !important;
+            }
+            #cart-items {
+                flex: 1 1 0% !important;
+                min-height: 0 !important;
+                overflow-y: auto !important;
+            }
+            #pos-cart-panel > div:last-child {
+                flex: 0 0 auto !important;
+                margin-top: 0 !important;
+                padding: 6px 8px 8px !important;
+                gap: 4px !important;
+                position: relative !important;
+                z-index: 20 !important;
+                background: #f8fafc !important;
+            }
+            #pos-cart-panel > div:last-child .space-y-1 {
+                gap: 2px !important;
+            }
+            #pos-cart-panel > div:last-child .border-t {
+                padding-top: 3px !important;
+            }
+            #checkout-btn {
+                position: relative !important;
+                display: flex !important;
+                width: 100% !important;
+                height: 42px !important;
+                min-height: 42px !important;
+                margin: 0 !important;
+                padding: 8px !important;
+                flex: 0 0 42px !important;
+                z-index: 21 !important;
+            }
+        }
+
+        /* Mobile/PWA layout hardening */
+        @supports (height: 100dvh) {
+            html, body { height: 100dvh; max-height: 100dvh; }
+        }
+        .pwa-safe-top { padding-top: env(safe-area-inset-top, 0px); }
+        @media (max-width: 767px) {
+            #pos-main-header, header.bg-white.border-b {
+                padding-left: 8px !important;
+                padding-right: 8px !important;
+            }
+            header.bg-white.border-b {
+                gap: 4px !important;
+                min-width: 0;
+            }
+            header.bg-white.border-b > div:first-child {
+                flex: 0 0 auto;
+                min-width: 0;
+            }
+            header.bg-white.border-b > div:first-child h1 {
+                font-size: 11px !important;
+                white-space: nowrap;
+            }
+            #brand-badge-header { display: none !important; }
+            header.bg-white.border-b nav {
+                gap: 2px !important;
+                padding: 2px !important;
+                flex: 1 1 auto;
+                min-width: 0;
+                justify-content: center;
+            }
+            header.bg-white.border-b nav .tab-btn {
+                padding: 6px 7px !important;
+                min-width: 30px;
+            }
+            #header-online-order-btn, #header-printer-btn {
+                padding: 6px 7px !important;
+                flex: 0 0 auto;
+            }
+            #header-online-order-btn span,
+            #header-printer-status-text,
+            #header-auto-badge { display: none !important; }
+            #online-order-modal {
+                align-items: flex-start !important;
+                padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom)) !important;
+                overflow-y: auto !important;
+            }
+            #online-order-modal > div {
+                width: 100% !important;
+                max-width: 520px !important;
+                max-height: calc(100dvh - 20px) !important;
+                overflow-y: auto !important;
+                -webkit-overflow-scrolling: touch;
+            }
+            input, select, textarea {
+                font-size: 16px !important; /* prevents Android/iOS focus zoom */
+            }
+            .cart-scroll-area { overscroll-behavior: contain; }
+        }
+        @media (max-width: 380px) {
+            header.bg-white.border-b > div:first-child .bg-brand-600 { display: none !important; }
+            header.bg-white.border-b nav .tab-btn { padding: 5px 5px !important; }
+            header.bg-white.border-b nav .tab-btn i { width: 13px !important; height: 13px !important; }
+        }
+        @media (orientation: landscape) and (max-width: 767px) {
+            #online-order-modal > div { max-height: calc(100dvh - 12px) !important; }
+        }
+
         /* Area struk hanya untuk proses cetak, jangan tampil di halaman kasir */
         #receipt-print-area {
             display: none !important;
@@ -202,7 +498,11 @@
             </button>
         </nav>
 
-        <!-- Printer 58mm Status & Role Badge -->
+        <!-- Online Order QR Quick Access -->
+            <button onclick="openOnlineOrderModal()" id="header-online-order-btn" class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100 cursor-pointer">
+                <i data-lucide="qr-code" class="w-3.5 h-3.5"></i><span class="hidden md:inline">Order QR</span>
+            </button>
+            <!-- Printer 58mm Status & Role Badge -->
         <div class="flex items-center space-x-2">
             <!-- PWA Install Button / Standalone Badge -->
             <!-- Bluetooth Printer Quick Badge -->
@@ -2666,5 +2966,36 @@
     });
     </script>
 <script>document.addEventListener('DOMContentLoaded', loadReceiptHeaderFooter);</script>
+
+<!-- ONLINE ORDER QR MODAL: configuration is local per POS browser/account until backend settings API is connected -->
+<div id="online-order-modal" class="fixed inset-0 z-[70] hidden items-center justify-center bg-slate-900/70 p-3 sm:p-5">
+  <div class="w-full max-w-xl max-h-[90dvh] overflow-y-auto rounded-2xl bg-white shadow-2xl">
+    <div class="flex items-center justify-between border-b border-slate-200 p-4"><div><h2 class="font-bold text-slate-900">Online Order & QR Outlet</h2><p class="text-xs text-slate-500">QR khusus outlet yang sedang login</p></div><button onclick="closeOnlineOrderModal()" class="rounded-lg px-3 py-2 text-slate-500 hover:bg-slate-100">✕</button></div>
+    <div class="space-y-4 p-4">
+      <div class="rounded-xl bg-indigo-50 p-3 text-sm"><b id="online-order-outlet-name">Outlet</b><div class="text-xs text-indigo-700 mt-1">Outlet diturunkan dari akun POS aktif.</div></div>
+      <div><label class="block text-xs font-bold mb-1">URL Form Online Order</label><input id="online-order-base-url" type="url" placeholder="https://domain-kamu.com/order" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><p class="mt-1 text-xs text-slate-500">Isi URL publik Form Order Online yang sudah di-host.</p></div>
+      <div><label class="block text-xs font-bold mb-1">Kode outlet pada QR</label><input id="online-order-outlet-code" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" readonly></div>
+      <div><label class="block text-xs font-bold mb-2">Jenis Order tersedia</label><div class="grid grid-cols-3 gap-2 text-sm"><label class="rounded-lg border p-2"><input type="checkbox" id="oo-pickup" checked> Pickup</label><label class="rounded-lg border p-2"><input type="checkbox" id="oo-dinein" checked> Dine In</label><label class="rounded-lg border p-2"><input type="checkbox" id="oo-delivery"> Delivery</label></div></div>
+      <div><label class="block text-xs font-bold mb-2">Metode Pembayaran</label><div class="grid grid-cols-3 gap-2 text-sm"><label class="rounded-lg border p-2"><input type="checkbox" id="oo-cash" checked> Cash</label><label class="rounded-lg border p-2"><input type="checkbox" id="oo-qris" checked> QRIS</label><label class="rounded-lg border p-2"><input type="checkbox" id="oo-transfer"> Transfer</label></div></div>
+      <div class="flex gap-2"><button onclick="saveOnlineOrderConfig()" class="flex-1 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-bold text-white">Simpan Pengaturan</button><button onclick="generateOnlineOrderQR()" class="flex-1 rounded-lg bg-slate-800 px-3 py-2 text-sm font-bold text-white">Generate QR</button></div>
+      <div id="online-order-qr-wrap" class="hidden rounded-xl border bg-white p-4 text-center"><div id="online-order-qr" class="mx-auto flex justify-center"></div><p id="online-order-link" class="mt-3 break-all text-xs text-slate-500"></p><div class="mt-3 flex gap-2"><button onclick="downloadOnlineOrderQR()" class="flex-1 rounded-lg border px-3 py-2 text-sm font-semibold">Download QR PNG</button><button onclick="copyOnlineOrderLink()" class="flex-1 rounded-lg border px-3 py-2 text-sm font-semibold">Copy Link</button></div></div>
+      <div class="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">Catatan: pengaturan ini sementara tersimpan di browser perangkat POS. Sinkronisasi pengaturan per outlet ke database backend akan dibuat pada tahap API berikutnya.</div>
+    </div>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+function onlineOrderSlug(value){return String(value||'OUTLET').trim().toUpperCase().replace(/[^A-Z0-9]+/g,'_').replace(/^_|_$/g,'')||'OUTLET'}
+function onlineOrderConfigKey(){return 'ae_pos_online_order_cfg_'+onlineOrderSlug(currentPOSAccount?.username||currentPOSAccount?.resto||'OUTLET')}
+function onlineOrderOutletName(){return String(currentPOSAccount?.resto||currentPOSAccount?.outlet||currentPOSAccount?.username||'Outlet POS').trim()}
+function openOnlineOrderModal(){if(!currentPOSAccount){notifyPOS('Login POS terlebih dahulu.',true);return;}const modal=document.getElementById('online-order-modal');modal.classList.remove('hidden');modal.classList.add('flex');document.getElementById('online-order-outlet-name').textContent=onlineOrderOutletName();document.getElementById('online-order-outlet-code').value=onlineOrderSlug(currentPOSAccount.resto||currentPOSAccount.username);const cfg=JSON.parse(localStorage.getItem(onlineOrderConfigKey())||'{}');document.getElementById('online-order-base-url').value=cfg.baseUrl||'';['pickup','dinein','delivery','cash','qris','transfer'].forEach(k=>{const el=document.getElementById('oo-'+k);if(el)el.checked=cfg[k]!==undefined?!!cfg[k]:['pickup','dinein','cash','qris'].includes(k)});if(window.lucide)lucide.createIcons();}
+function closeOnlineOrderModal(){const m=document.getElementById('online-order-modal');m.classList.add('hidden');m.classList.remove('flex')}
+function saveOnlineOrderConfig(){const cfg={baseUrl:document.getElementById('online-order-base-url').value.trim(),pickup:document.getElementById('oo-pickup').checked,dinein:document.getElementById('oo-dinein').checked,delivery:document.getElementById('oo-delivery').checked,cash:document.getElementById('oo-cash').checked,qris:document.getElementById('oo-qris').checked,transfer:document.getElementById('oo-transfer').checked};localStorage.setItem(onlineOrderConfigKey(),JSON.stringify(cfg));notifyPOS('Pengaturan Online Order tersimpan di perangkat ini.');}
+function getOnlineOrderUrl(){const cfg=JSON.parse(localStorage.getItem(onlineOrderConfigKey())||'{}');if(!cfg.baseUrl){notifyPOS('Isi URL publik Form Online Order terlebih dahulu.',true);return '';}const url=new URL(cfg.baseUrl);url.searchParams.set('outlet',onlineOrderSlug(currentPOSAccount?.resto||currentPOSAccount?.username));url.searchParams.set('outletName',onlineOrderOutletName());url.searchParams.set('config',onlineOrderConfigKey());return url.toString()}
+function generateOnlineOrderQR(){saveOnlineOrderConfig();const link=getOnlineOrderUrl();if(!link)return;const box=document.getElementById('online-order-qr');box.innerHTML='';if(!window.QRCode){notifyPOS('Library QR belum tersedia. Pastikan internet aktif.',true);return;}new QRCode(box,{text:link,width:220,height:220,correctLevel:QRCode.CorrectLevel.H});document.getElementById('online-order-link').textContent=link;document.getElementById('online-order-qr-wrap').classList.remove('hidden')}
+function downloadOnlineOrderQR(){const img=document.querySelector('#online-order-qr img');const canvas=document.querySelector('#online-order-qr canvas');const src=img?.src||canvas?.toDataURL('image/png');if(!src){notifyPOS('Generate QR terlebih dahulu.',true);return;}const a=document.createElement('a');a.href=src;a.download='QR-ORDER-'+onlineOrderSlug(currentPOSAccount?.resto||currentPOSAccount?.username)+'.png';a.click()}
+function copyOnlineOrderLink(){const link=document.getElementById('online-order-link').textContent;if(!link)return;navigator.clipboard?.writeText(link).then(()=>notifyPOS('Link Online Order berhasil disalin.')).catch(()=>prompt('Salin link:',link));}
+</script>
+
 </body>
 </html>
