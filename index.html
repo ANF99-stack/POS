@@ -3008,7 +3008,7 @@
       <div><label class="block text-xs font-bold mb-1">Kode outlet pada QR</label><input id="online-order-outlet-code" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" readonly></div>
       <div><label class="block text-xs font-bold mb-2">Jenis Order tersedia</label><div class="grid grid-cols-3 gap-2 text-sm"><label class="rounded-lg border p-2"><input type="checkbox" id="oo-pickup" checked> Pickup</label><label class="rounded-lg border p-2"><input type="checkbox" id="oo-dinein" checked> Dine In</label><label class="rounded-lg border p-2"><input type="checkbox" id="oo-delivery"> Delivery</label></div></div>
       <div><label class="block text-xs font-bold mb-2">Metode Pembayaran</label><div class="grid grid-cols-3 gap-2 text-sm"><label class="rounded-lg border p-2"><input type="checkbox" id="oo-cash" checked> Cash</label><label class="rounded-lg border p-2"><input type="checkbox" id="oo-qris" checked> QRIS</label><label class="rounded-lg border p-2"><input type="checkbox" id="oo-transfer"> Transfer</label></div></div>
-      <div class="flex gap-2"><button onclick="saveOnlineOrderConfig()" class="flex-1 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-bold text-white">Simpan Pengaturan</button><button onclick="generateOnlineOrderQR()" class="flex-1 rounded-lg bg-slate-800 px-3 py-2 text-sm font-bold text-white">Generate QR</button></div>
+      <div class="flex gap-2"><button type="button" onclick="saveOnlineOrderConfig()" class="flex-1 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-bold text-white">Simpan Pengaturan</button><button type="button" id="online-order-generate-btn" onclick="generateOnlineOrderQR()" class="flex-1 rounded-lg bg-slate-800 px-3 py-2 text-sm font-bold text-white">Generate QR</button></div>
       <div id="online-order-qr-wrap" class="hidden rounded-xl border bg-white p-4 text-center"><div id="online-order-qr" class="mx-auto flex justify-center"></div><p id="online-order-link" class="mt-3 break-all text-xs text-slate-500"></p><div class="mt-3 flex gap-2"><button onclick="downloadOnlineOrderQR()" class="flex-1 rounded-lg border px-3 py-2 text-sm font-semibold">Download QR PNG</button><button onclick="copyOnlineOrderLink()" class="flex-1 rounded-lg border px-3 py-2 text-sm font-semibold">Copy Link</button></div></div>
       <div class="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">Form dipublikasikan di GitHub Pages. QR memakai username POS outlet dan tetap mengirim permintaan ke URL backend POS yang sama.</div>
     </div>
@@ -3021,9 +3021,79 @@ function onlineOrderConfigKey(){return 'ae_pos_online_order_cfg_'+onlineOrderSlu
 function onlineOrderOutletName(){return String(currentPOSAccount?.resto||currentPOSAccount?.outlet||currentPOSAccount?.username||'Outlet POS').trim()}
 function openOnlineOrderModal(){if(!currentPOSAccount){notifyPOS('Login POS terlebih dahulu.',true);return;}const modal=document.getElementById('online-order-modal');modal.classList.remove('hidden');modal.classList.add('flex');document.getElementById('online-order-outlet-name').textContent=onlineOrderOutletName();document.getElementById('online-order-outlet-code').value=String(currentPOSAccount.username||'').trim();document.getElementById('online-order-base-url').value=ONLINE_ORDER_FORM_URL;const cfg=JSON.parse(localStorage.getItem(onlineOrderConfigKey())||'{}');['pickup','dinein','delivery','cash','qris','transfer'].forEach(k=>{const el=document.getElementById('oo-'+k);if(el)el.checked=cfg[k]!==undefined?!!cfg[k]:['pickup','dinein','cash','qris'].includes(k)});if(window.lucide)lucide.createIcons();}
 function closeOnlineOrderModal(){const m=document.getElementById('online-order-modal');m.classList.add('hidden');m.classList.remove('flex')}
-function saveOnlineOrderConfig(){const cfg={baseUrl:ONLINE_ORDER_FORM_URL,pickup:document.getElementById('oo-pickup').checked,dinein:document.getElementById('oo-dinein').checked,delivery:document.getElementById('oo-delivery').checked,cash:document.getElementById('oo-cash').checked,qris:document.getElementById('oo-qris').checked,transfer:document.getElementById('oo-transfer').checked};localStorage.setItem(onlineOrderConfigKey(),JSON.stringify(cfg));notifyPOS('Pengaturan Online Order tersimpan di perangkat ini.');}
-function getOnlineOrderUrl(){const username=String(currentPOSAccount?.username||'').trim();if(!username){notifyPOS('Username POS outlet tidak ditemukan. Silakan login ulang.',true);return '';}const url=new URL(ONLINE_ORDER_FORM_URL);url.searchParams.set('outlet',username);url.searchParams.set('outletName',onlineOrderOutletName());url.searchParams.set('api',POS_GAS_URL);return url.toString()}
-function generateOnlineOrderQR(){saveOnlineOrderConfig();const link=getOnlineOrderUrl();if(!link)return;const box=document.getElementById('online-order-qr');box.innerHTML='';if(!window.QRCode){notifyPOS('Library QR belum tersedia. Pastikan internet aktif.',true);return;}new QRCode(box,{text:link,width:220,height:220,correctLevel:QRCode.CorrectLevel.H});document.getElementById('online-order-link').textContent=link;document.getElementById('online-order-qr-wrap').classList.remove('hidden')}
+function saveOnlineOrderConfig(options={}){
+  const cfg={baseUrl:ONLINE_ORDER_FORM_URL,pickup:document.getElementById('oo-pickup').checked,dinein:document.getElementById('oo-dinein').checked,delivery:document.getElementById('oo-delivery').checked,cash:document.getElementById('oo-cash').checked,qris:document.getElementById('oo-qris').checked,transfer:document.getElementById('oo-transfer').checked};
+  localStorage.setItem(onlineOrderConfigKey(),JSON.stringify(cfg));
+  if(!options.silent) notifyPOS('Pengaturan Online Order tersimpan di perangkat ini.');
+  return cfg;
+}
+function getOnlineOrderUrl(){
+  const username=String(currentPOSAccount?.username||'').trim();
+  if(!username){notifyPOS('Username POS outlet tidak ditemukan. Silakan login ulang.',true);return '';}
+  try {
+    const url=new URL(ONLINE_ORDER_FORM_URL);
+    url.searchParams.set('outlet',username);
+    url.searchParams.set('outletName',onlineOrderOutletName());
+    url.searchParams.set('api',POS_GAS_URL);
+    return url.toString();
+  } catch(err) {
+    notifyPOS('URL Form Online Order tidak valid: '+(err?.message||err),true);
+    return '';
+  }
+}
+async function ensureOnlineOrderQRCodeLibrary(){
+  if(typeof window.QRCode==='function') return window.QRCode;
+  const sources=[
+    'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',
+    'https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js'
+  ];
+  let lastError=null;
+  for(const src of sources){
+    try {
+      await new Promise((resolve,reject)=>{
+        const script=document.createElement('script');
+        script.src=src;
+        script.async=true;
+        script.onload=()=>typeof window.QRCode==='function'?resolve():reject(new Error('Library termuat tetapi fungsi QRCode tidak tersedia.'));
+        script.onerror=()=>reject(new Error('CDN gagal dimuat: '+src));
+        document.head.appendChild(script);
+      });
+      if(typeof window.QRCode==='function') return window.QRCode;
+    } catch(err) { lastError=err; }
+  }
+  throw lastError||new Error('Semua sumber library QR tidak dapat diakses.');
+}
+async function generateOnlineOrderQR(){
+  const link=getOnlineOrderUrl();
+  if(!link) return;
+  saveOnlineOrderConfig({silent:true});
+  const box=document.getElementById('online-order-qr');
+  const wrap=document.getElementById('online-order-qr-wrap');
+  const button=document.getElementById('online-order-generate-btn');
+  const originalLabel=button?.textContent||'Generate QR';
+  if(!box||!wrap){notifyPOS('Area QR tidak ditemukan pada halaman POS.',true);return;}
+  if(button){button.disabled=true;button.textContent='Membuat QR...';button.classList.add('opacity-60');}
+  box.innerHTML='';
+  wrap.classList.add('hidden');
+  try {
+    const QRLib=await ensureOnlineOrderQRCodeLibrary();
+    const level=QRLib.CorrectLevel?.M ?? QRLib.CorrectLevel?.H ?? 0;
+    new QRLib(box,{text:link,width:240,height:240,correctLevel:level});
+    if(!box.querySelector('canvas, img')) throw new Error('Library QR aktif, tetapi gambar QR tidak berhasil dirender.');
+    document.getElementById('online-order-link').textContent=link;
+    wrap.classList.remove('hidden');
+    notifyPOS('QR Order Online berhasil dibuat untuk outlet '+String(currentPOSAccount?.username||'')+'.');
+  } catch(err) {
+    console.error('Generate Online Order QR gagal:',err);
+    document.getElementById('online-order-link').textContent=link;
+    wrap.classList.remove('hidden');
+    box.innerHTML='<div class="rounded-lg bg-rose-50 p-3 text-xs text-rose-700">QR belum dapat dirender. Silakan gunakan tombol Copy Link atau periksa koneksi internet, lalu coba Generate QR kembali.</div>';
+    notifyPOS('Gagal membuat QR: '+(err?.message||'library QR tidak dapat dimuat.'),true);
+  } finally {
+    if(button){button.disabled=false;button.textContent=originalLabel;button.classList.remove('opacity-60');}
+  }
+}
 function downloadOnlineOrderQR(){const img=document.querySelector('#online-order-qr img');const canvas=document.querySelector('#online-order-qr canvas');const src=img?.src||canvas?.toDataURL('image/png');if(!src){notifyPOS('Generate QR terlebih dahulu.',true);return;}const a=document.createElement('a');a.href=src;a.download='QR-ORDER-'+onlineOrderSlug(currentPOSAccount?.resto||currentPOSAccount?.username)+'.png';a.click()}
 function copyOnlineOrderLink(){const link=document.getElementById('online-order-link').textContent;if(!link)return;navigator.clipboard?.writeText(link).then(()=>notifyPOS('Link Online Order berhasil disalin.')).catch(()=>prompt('Salin link:',link));}
 </script>
