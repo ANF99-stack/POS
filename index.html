@@ -3345,6 +3345,7 @@ async function setOnlineOrderPayment(orderId,paymentStatus){if(!currentPOSAccoun
 // Notifikasi suara order baru: polling berjalan selama akun POS login, termasuk saat Inbox ditutup.
 let onlineOrderSoundEnabled = localStorage.getItem('ae_pos_online_order_sound') === '1';
 let onlineOrderAudioContext = null;
+let onlineOrderAlarmHandle = null;
 let onlineOrderSeenIds = new Set();
 let onlineOrderSeenUsername = '';
 let onlineOrderNotificationPollBusy = false;
@@ -3366,6 +3367,25 @@ function playOnlineOrderNotificationSound(){
     [880,1175].forEach((freq,index)=>{const osc=ctx.createOscillator(),gain=ctx.createGain();osc.type='sine';osc.frequency.setValueAtTime(freq,now+index*.16);gain.gain.setValueAtTime(.0001,now+index*.16);gain.gain.exponentialRampToValueAtTime(.22,now+index*.16+.025);gain.gain.exponentialRampToValueAtTime(.0001,now+index*.16+.22);osc.connect(gain);gain.connect(ctx.destination);osc.start(now+index*.16);osc.stop(now+index*.16+.24);});
   }catch(e){console.warn('Suara notifikasi tidak dapat diputar:',e);}
 }
+async function startOnlineOrderAlarm(){
+  if(!onlineOrderSoundEnabled||!onlineOrderAudioContext)return;
+  // Jangan membuat beberapa loop suara untuk pesanan yang datang bersamaan.
+  if(onlineOrderAlarmHandle)return;
+  playOnlineOrderNotificationSound();
+  onlineOrderAlarmHandle=setInterval(()=>{
+    const alertModal=document.getElementById('online-order-alert-modal');
+    const inboxModal=document.getElementById('online-order-inbox-modal');
+    // Alarm terus berulang sampai Inbox benar-benar dibuka.
+    if(!onlineOrderSoundEnabled||!alertModal||(!alertModal.classList.contains('flex') && inboxModal?.classList.contains('flex'))){
+      stopOnlineOrderAlarm();
+      return;
+    }
+    playOnlineOrderNotificationSound();
+  }, 1200);
+}
+function stopOnlineOrderAlarm(){
+  if(onlineOrderAlarmHandle){clearInterval(onlineOrderAlarmHandle);onlineOrderAlarmHandle=null;}
+}
 async function toggleOnlineOrderSound(){
   try{
     const AudioCtx=window.AudioContext||window.webkitAudioContext;
@@ -3375,8 +3395,8 @@ async function toggleOnlineOrderSound(){
     onlineOrderSoundEnabled=!onlineOrderSoundEnabled;
     localStorage.setItem('ae_pos_online_order_sound',onlineOrderSoundEnabled?'1':'0');
     updateOnlineOrderSoundButton();
-    if(onlineOrderSoundEnabled){playOnlineOrderNotificationSound();notifyPOS('Suara notifikasi order aktif.');}
-    else notifyPOS('Suara notifikasi order dinonaktifkan.');
+    if(onlineOrderSoundEnabled){playOnlineOrderNotificationSound();const alertModal=document.getElementById('online-order-alert-modal');if(alertModal?.classList.contains('flex'))startOnlineOrderAlarm();notifyPOS('Suara notifikasi order aktif.');}
+    else {stopOnlineOrderAlarm();notifyPOS('Suara notifikasi order dinonaktifkan.');}
   }catch(e){notifyPOS('Gagal mengaktifkan suara. Coba klik kembali.',true);}
 }
 let onlineOrderAlertQueue = [];
@@ -3394,8 +3414,8 @@ function showOnlineOrderAlert(orders){
   if(multiple){multiple.textContent=fresh.length>1?`Ada ${fresh.length} pesanan baru masuk. Buka Inbox untuk melihat semuanya.`:'';multiple.classList.toggle('hidden',fresh.length<2);}
   modal.classList.remove('hidden');modal.classList.add('flex');
 }
-function closeOnlineOrderAlert(){const modal=document.getElementById('online-order-alert-modal');if(modal){modal.classList.add('hidden');modal.classList.remove('flex');}}
-async function openInboxFromOnlineOrderAlert(){closeOnlineOrderAlert();await openOnlineOrderInbox();}
+function closeOnlineOrderAlert(){stopOnlineOrderAlarm();const modal=document.getElementById('online-order-alert-modal');if(modal){modal.classList.add('hidden');modal.classList.remove('flex');}}
+async function openInboxFromOnlineOrderAlert(){stopOnlineOrderAlarm();closeOnlineOrderAlert();await openOnlineOrderInbox();}
 async function pollIncomingOnlineOrders(){
   const username=String(currentPOSAccount?.username||'').trim();
   if(!username||onlineOrderNotificationPollBusy)return;
@@ -3418,8 +3438,8 @@ async function pollIncomingOnlineOrders(){
     });
     if(onlineOrderSeenIds.size>500)onlineOrderSeenIds=new Set(Array.from(onlineOrderSeenIds).slice(-300));
     if(newOrders.length){
-      playOnlineOrderNotificationSound();
       showOnlineOrderAlert(newOrders);
+      startOnlineOrderAlarm();
       const btn=document.getElementById('header-online-inbox-btn');
       if(btn){btn.classList.add('ring-2','ring-amber-400');setTimeout(()=>btn.classList.remove('ring-2','ring-amber-400'),2500);}
     }
