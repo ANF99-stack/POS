@@ -424,6 +424,9 @@
                 margin: 0mm;
             }
         }
+        .inbox-action-btn { transform: translateZ(0); }
+        .inbox-action-btn:not(:disabled):active { transform: scale(.96); }
+        .inbox-action-btn:disabled { pointer-events: none; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 h-full min-h-full max-h-[100dvh] flex flex-col overflow-hidden">
@@ -513,14 +516,16 @@
                 <i data-lucide="inbox" class="w-3.5 h-3.5"></i><span class="inbox-label hidden md:inline">Order Masuk</span>
                 <span id="online-inbox-count" class="hidden absolute -top-1.5 -right-1.5 min-w-[17px] h-[17px] px-1 rounded-full bg-rose-600 text-white text-[9px] font-bold items-center justify-center">0</span>
             </button>
+            <button type="button" onclick="toggleOnlineOrderSound()" id="online-order-sound-btn" title="Aktifkan suara notifikasi order" aria-label="Aktifkan suara notifikasi order" class="flex items-center justify-center px-2 py-1.5 rounded-lg border text-xs font-semibold transition-all bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200 cursor-pointer">
+                <i data-lucide="volume-x" class="w-3.5 h-3.5" id="online-order-sound-icon"></i>
+            </button>
             <!-- Printer 58mm Status & Role Badge -->
         <div class="flex items-center space-x-2">
             <!-- PWA Install Button / Standalone Badge -->
             <!-- Bluetooth Printer Quick Badge -->
             <button onclick="openPrinterModal()" id="header-printer-btn" class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200 cursor-pointer">
                 <i data-lucide="bluetooth" class="w-3.5 h-3.5 text-slate-500" id="header-bt-icon"></i>
-                <span id="header-printer-status-text" class="hidden md:inline max-w-[120px] truncate">BT 58mm</span>
-                <span id="header-auto-badge" class="text-[10px] text-emerald-600 font-bold">Auto</span>
+                
             </button>
 
             <div class="hidden xl:flex flex-col text-right">
@@ -883,9 +888,14 @@
         <!-- ================= 4. TAB RIWAYAT TRANSAKSI ================= -->
         <div id="tab-history" class="tab-content h-full overflow-y-auto p-4 sm:p-6 hidden">
             <div class="max-w-7xl mx-auto space-y-6">
-                <div>
-                    <h2 class="text-xl sm:text-2xl font-bold text-slate-900">Riwayat Transaksi Penjualan</h2>
-                    <p class="text-xs sm:text-sm text-slate-500">Daftar seluruh transaksi yang telah berhasil diproses beserta tombol cetak ulang struk 58mm.</p>
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h2 class="text-xl sm:text-2xl font-bold text-slate-900">Riwayat Transaksi Penjualan</h2>
+                        <p class="text-xs sm:text-sm text-slate-500">Daftar transaksi penjualan dan status sinkronisasi ke server.</p>
+                    </div>
+                    <button type="button" id="history-sync-btn" onclick="syncPendingTransactions()" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition-all active:scale-[.98]">
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i><span>Sync Transaksi</span>
+                    </button>
                 </div>
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="overflow-x-auto">
@@ -897,6 +907,7 @@
                                     <th class="p-4">Resto</th>
                                     <th class="p-4">Brand</th>
                                     <th class="p-4 text-right">Total</th>
+                                    <th class="p-4">Sinkronisasi</th>
                                     <th class="p-4 text-right">Cetak Ulang</th>
                                 </tr>
                             </thead>
@@ -1967,7 +1978,6 @@
         // Kembalikan ke tab terakhir yang disimpan
         const savedTab = localStorage.getItem(STORAGE_KEY_TAB) || 'pos';
         switchTab(savedTab);
-        startOnlineOrderNotificationPolling();
         notifyPOS('Login berhasil · ' + currentPOSAccount.brand + ' · ' + (currentPOSAccount.resto || 'Resto') + ' · ' + (currentPOSAccount.posType || 'TIPE POS BELUM DIATUR'));
     }
 
@@ -2497,9 +2507,15 @@
 
         try {
             try {
-                await posApi({ action: 'saveTransaction', transaction: tx });
-            } catch(e) {
-                // Simpan lokal jika network slow
+                const saved = await posApi({ action: 'saveTransaction', transaction: tx });
+                if (!saved || saved.status !== 'success') throw new Error(saved?.message || 'Server belum mengonfirmasi penyimpanan.');
+                tx.syncStatus = 'SYNCED';
+                tx.syncError = '';
+                tx.syncedAt = new Date().toISOString();
+            } catch(syncError) {
+                // Transaksi tetap disimpan lokal dan ditandai pending agar bisa dikirim ulang.
+                tx.syncStatus = 'PENDING';
+                tx.syncError = String(syncError?.message || 'Koneksi server gagal');
             }
 
             lastCompletedTransaction = tx;
@@ -2517,7 +2533,7 @@
                 notifyPOS('Transaksi sukses! Mencetak struk 58mm otomatis...');
                 await printReceipt58mm(tx, true);
             } else {
-                notifyPOS('Pembayaran berhasil disimpan.');
+                notifyPOS(tx.syncStatus === 'PENDING' ? 'Transaksi tersimpan di perangkat, tetapi belum masuk server. Buka Riwayat lalu tekan Sync Transaksi.' : 'Pembayaran berhasil disimpan.');
                 reviewReceipt();
             }
         } catch(e) {
@@ -2526,6 +2542,42 @@
         } finally {
             btn.disabled = false;
             btn.textContent = 'Bayar & Cetak';
+        }
+    }
+
+    async function syncPendingTransactions() {
+        if (!currentPOSAccount?.username) { notifyPOS('Login POS terlebih dahulu.', true); return; }
+        const btn = document.getElementById('history-sync-btn');
+        const todayKey = new Date().toLocaleDateString('en-CA');
+        const pending = (Array.isArray(posTransactions) ? posTransactions : []).filter(tx => {
+            const raw = tx.dateISO || tx.date || tx.timestamp || tx.createdAt;
+            const d = raw ? new Date(raw) : null;
+            const isToday = d && !Number.isNaN(d.getTime()) && d.toLocaleDateString('en-CA') === todayKey;
+            // Rekonsiliasi transaksi hari ini yang belum memiliki penanda sync (versi lama).
+            return tx.syncStatus === 'PENDING' || (!tx.syncStatus && isToday);
+        });
+        if (!pending.length) { notifyPOS('Tidak ada transaksi pending untuk disinkronkan.'); return; }
+        if (btn) { btn.disabled = true; btn.classList.add('opacity-60','cursor-wait'); btn.innerHTML = '<span class="inline-block h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin"></span><span>Menyinkronkan...</span>'; }
+        let success = 0, failed = 0;
+        try {
+            for (const tx of pending) {
+                try {
+                    const result = await posApi({ action: 'saveTransaction', transaction: tx });
+                    if (!result || result.status !== 'success') throw new Error(result?.message || 'Server tidak mengonfirmasi transaksi.');
+                    const idx = posTransactions.findIndex(x => String(x.id || x.invoice) === String(tx.id || tx.invoice));
+                    if (idx >= 0) { posTransactions[idx] = { ...posTransactions[idx], syncStatus: 'SYNCED', syncError: '', syncedAt: new Date().toISOString() }; }
+                    success++;
+                } catch (e) {
+                    const idx = posTransactions.findIndex(x => String(x.id || x.invoice) === String(tx.id || tx.invoice));
+                    if (idx >= 0) posTransactions[idx] = { ...posTransactions[idx], syncStatus: 'PENDING', syncError: String(e.message || e) };
+                    failed++;
+                }
+                try { localStorage.setItem('pos_tx_' + currentPOSAccount.username, JSON.stringify(posTransactions)); } catch(e) {}
+            }
+            renderHistory(); refreshDashboard();
+            notifyPOS(`Sinkronisasi selesai: ${success} berhasil, ${failed} masih pending.`, failed > 0);
+        } finally {
+            if (btn) { btn.disabled = false; btn.classList.remove('opacity-60','cursor-wait'); btn.innerHTML = '<i data-lucide="refresh-cw" class="w-4 h-4"></i><span>Sync Transaksi</span>'; if(window.lucide)lucide.createIcons(); }
         }
     }
 
@@ -2622,6 +2674,7 @@
                 <td class="p-4 text-xs">${esc(t.resto)}</td>
                 <td class="p-4 text-xs font-semibold">${esc(t.brand)}</td>
                 <td class="p-4 text-right font-mono tabular-nums font-bold">${money(t.total)}</td>
+                <td class="p-4">${t.syncStatus === 'PENDING' ? '<span class="inline-flex rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">Pending</span>' : '<span class="inline-flex rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">Tersinkron</span>'}</td>
                 <td class="p-4 text-right">
                     <button onclick="printReceipt58mm(posTransactions[${txIndex}], false)" class="px-2.5 py-1 rounded bg-brand-600 text-white text-xs font-semibold hover:opacity-90 inline-flex items-center gap-1 cursor-pointer">
                         <i data-lucide="printer" class="w-3 h-3"></i>
@@ -2629,7 +2682,7 @@
                     </button>
                 </td>
             </tr>`;
-        }).join('') : '<tr><td colspan="6" class="p-6 text-center text-slate-500">Belum ada transaksi hari ini.</td></tr>';
+        }).join('') : '<tr><td colspan="7" class="p-6 text-center text-slate-500">Belum ada transaksi hari ini.</td></tr>';
         if (window.lucide) lucide.createIcons();
     }
 
@@ -2941,7 +2994,6 @@
             // TETAP DI HALAMAN TERAKHIR
             const savedTab = localStorage.getItem(STORAGE_KEY_TAB) || 'pos';
             switchTab(savedTab);
-            startOnlineOrderNotificationPolling();
         } else {
             // Belum login
             document.getElementById('login-overlay').classList.remove('hidden');
@@ -2988,7 +3040,7 @@
   <div class="w-full max-w-4xl max-h-[96dvh] sm:max-h-[92dvh] flex flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
     <div class="shrink-0 flex items-center justify-between gap-3 border-b border-slate-200 bg-white p-3 sm:p-4">
       <div class="min-w-0"><h2 id="online-inbox-title" class="font-bold text-slate-900 text-base sm:text-lg flex items-center gap-2"><i data-lucide="inbox" class="w-5 h-5 text-emerald-600"></i> Inbox Online Order</h2><p id="online-inbox-subtitle" class="text-[11px] text-slate-500 mt-0.5">Pesanan pelanggan untuk outlet yang sedang login</p></div>
-      <div class="flex items-center gap-2 shrink-0"><button type="button" id="online-inbox-sound-btn" onclick="toggleOnlineOrderSound()" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100"><i data-lucide="volume-x" class="inline w-3.5 h-3.5 mr-1"></i><span>Aktifkan Suara</span></button><button onclick="refreshOnlineOrderInbox()" id="online-inbox-refresh" class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold hover:bg-slate-50"><i data-lucide="refresh-cw" class="inline w-3.5 h-3.5 mr-1"></i>Refresh</button><button onclick="closeOnlineOrderInbox()" class="rounded-lg px-3 py-2 text-xl text-slate-500 hover:bg-slate-100" aria-label="Tutup">&times;</button></div>
+      <div class="flex items-center gap-2 shrink-0"><button onclick="refreshOnlineOrderInbox()" id="online-inbox-refresh" class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold hover:bg-slate-50"><i data-lucide="refresh-cw" class="inline w-3.5 h-3.5 mr-1"></i>Refresh</button><button onclick="closeOnlineOrderInbox()" class="rounded-lg px-3 py-2 text-xl text-slate-500 hover:bg-slate-100" aria-label="Tutup">&times;</button></div>
     </div>
     <div class="shrink-0 flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50 p-3">
       <label class="text-xs font-semibold text-slate-600" for="online-inbox-filter">Status:</label>
@@ -2996,7 +3048,7 @@
       <span id="online-inbox-count-label" class="ml-auto text-[11px] text-slate-500">0 pesanan</span>
     </div>
     <div id="online-inbox-list" class="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-slate-50 p-3 sm:p-4 space-y-3" style="-webkit-overflow-scrolling:touch"><div class="rounded-xl bg-white p-8 text-center text-sm text-slate-400">Memuat pesanan...</div></div>
-    <div class="shrink-0 border-t border-slate-200 bg-white px-3 py-2 text-[10px] text-slate-500">Status order dan pembayaran dikelola terpisah. Pastikan bukti QRIS/transfer diperiksa sebelum menandai pembayaran lunas.</div>
+    <div class="shrink-0 border-t border-slate-200 bg-white px-3 py-2 text-[10px] text-slate-500">Inbox diperbarui otomatis setiap 3 detik selama jendela terbuka. Status order dan pembayaran dikelola terpisah; periksa bukti sebelum menandai lunas.</div>
   </div>
 </div>
 
@@ -3170,6 +3222,34 @@ function copyOnlineOrderLink(){const link=document.getElementById('online-order-
 // ================= ONLINE ORDER INBOX (menggunakan API GAS POS yang sama) =================
 let onlineInboxCache = [];
 let onlineInboxPollHandle = null;
+function onlineAcceptedOrdersKey(){return 'ae_pos_online_accepted_orders_v1_'+String(currentPOSAccount?.username||'').trim().toLowerCase();}
+function getOnlineAcceptedOrders(){try{const v=JSON.parse(localStorage.getItem(onlineAcceptedOrdersKey())||'[]');return Array.isArray(v)?v.map(String):[];}catch(e){return [];}}
+function markOnlineOrderAdded(orderId){const ids=getOnlineAcceptedOrders();if(!ids.includes(String(orderId)))ids.push(String(orderId));try{localStorage.setItem(onlineAcceptedOrdersKey(),JSON.stringify(ids));}catch(e){notifyPOS('Penanda order online tidak dapat disimpan di perangkat.',true);}}
+function addOnlineOrderToPOSCart(order){
+  if(!order||!order.orderId)throw new Error('Data pesanan online tidak lengkap.');
+  const orderId=String(order.orderId),items=Array.isArray(order.items)?order.items:[];
+  if(!items.length)throw new Error('Detail item pesanan tidak ditemukan.');
+  const accepted=getOnlineAcceptedOrders();
+  if(accepted.includes(orderId)||posCart.some(x=>String(x.onlineOrderId||'')===orderId)){
+    notifyPOS('Pesanan '+orderId+' sudah pernah dimasukkan ke keranjang POS.');return false;
+  }
+  const prepared=[];
+  items.forEach((i,index)=>{
+    const qty=Number(i.qty)||0,price=Number(i.unitPrice??i.price)||0;
+    if(qty<=0)return;
+    const name=String(i.name||i.productName||'').trim();
+    if(!name)throw new Error('Ada item pesanan tanpa nama produk.');
+    prepared.push({id:'ONLINE-'+orderId+'-'+index+'-'+String(i.productId||name),name,category:String(i.category||'Online Order'),price,qty,onlineOrderId:orderId});
+  });
+  if(!prepared.length)throw new Error('Jumlah item pesanan tidak valid.');
+  posCart.push(...prepared);markOnlineOrderAdded(orderId);saveCartToStorage();renderPOSCart();
+  notifyPOS('Pesanan '+orderId+' diterima dan '+prepared.length+' item masuk ke keranjang POS.');
+  if(window.innerWidth<768)setMobilePosView('cart');
+  return true;
+}
+
+let onlineInboxRefreshing = false;
+const onlineOrderActionLocks = new Set();
 function onlineInboxStatusLabel(v){return ({NEW:'Baru',ACCEPTED:'Diterima',PREPARING:'Sedang diproses',READY:'Siap diambil/diantar',COMPLETED:'Selesai',REJECTED:'Ditolak',CANCELLED:'Dibatalkan'})[String(v||'').toUpperCase()]||v||'-';}
 function onlineInboxPaymentLabel(v){return ({WAITING_VERIFICATION:'Menunggu verifikasi',WAITING_PAYMENT:'Menunggu pembayaran',UNPAID:'Belum lunas',PAID:'Lunas',REJECTED:'Ditolak'})[String(v||'').toUpperCase()]||v||'-';}
 function onlineInboxMoney(v){return 'Rp '+Number(v||0).toLocaleString('id-ID');}
@@ -3181,9 +3261,7 @@ async function fetchOnlineOrderInbox(statusFilter='ALL'){
   if(!currentPOSAccount?.username)throw new Error('Silakan login ke akun POS outlet terlebih dahulu.');
   const data=await posApi({action:'getOnlineOrderInbox',username:currentPOSAccount.username,statusFilter:statusFilter,limit:60});
   if(data.status!=='success')throw new Error(data.message||'Inbox gagal dimuat.');
-  onlineInboxCache=Array.isArray(data.orders)?data.orders:[];
-  updateOnlineInboxBadge(data.pendingCount||0);
-  return data;
+  onlineInboxCache=Array.isArray(data.orders)?data.orders:[];updateOnlineInboxBadge(data.pendingCount||0);return data;
 }
 async function openOnlineOrderInbox(){
   if(!currentPOSAccount?.username){notifyPOS('Login POS terlebih dahulu.',true);return;}
@@ -3193,128 +3271,120 @@ async function openOnlineOrderInbox(){
   if(window.lucide)lucide.createIcons();
 }
 function closeOnlineOrderInbox(){const modal=document.getElementById('online-order-inbox-modal');modal.classList.add('hidden');modal.classList.remove('flex');}
-async function refreshOnlineOrderInbox(){
+async function refreshOnlineOrderInbox(silent=false){
   const list=document.getElementById('online-inbox-list');const btn=document.getElementById('online-inbox-refresh');
-  if(!list)return; if(btn)btn.disabled=true;
-  list.innerHTML='<div class="rounded-xl bg-white p-8 text-center text-sm text-slate-400">Memuat pesanan online...</div>';
-  try{const filter=document.getElementById('online-inbox-filter')?.value||'ALL';const data=await fetchOnlineOrderInbox(filter);renderOnlineOrderInbox(data.orders||[]);document.getElementById('online-inbox-count-label').textContent=(data.totalCount||0)+' pesanan · '+(data.pendingCount||0)+' baru';}
-  catch(e){list.innerHTML='<div class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">'+onlineInboxEsc(e.message)+'</div>';notifyPOS(e.message,true);}
-  finally{if(btn)btn.disabled=false;}
+  if(!list||onlineInboxRefreshing)return;onlineInboxRefreshing=true;if(btn){btn.disabled=true;btn.classList.add('opacity-60');}
+  if(!silent)list.innerHTML='<div class="rounded-xl bg-white p-8 text-center text-sm text-slate-400"><span class="inline-block h-4 w-4 mr-2 align-middle rounded-full border-2 border-slate-300 border-t-indigo-600 animate-spin"></span>Memuat pesanan online...</div>';
+  try{const filter=document.getElementById('online-inbox-filter')?.value||'ALL';const data=await fetchOnlineOrderInbox(filter);renderOnlineOrderInbox(data.orders||[]);const label=document.getElementById('online-inbox-count-label');if(label)label.textContent=(data.totalCount||0)+' pesanan · '+(data.pendingCount||0)+' baru · diperbarui '+new Date().toLocaleTimeString('id-ID');}
+  catch(e){if(!silent){list.innerHTML='<div class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">'+onlineInboxEsc(e.message)+'</div>';notifyPOS(e.message,true);}}
+  finally{onlineInboxRefreshing=false;if(btn){btn.disabled=false;btn.classList.remove('opacity-60');}}
 }
 function renderOnlineOrderInbox(orders){
   const list=document.getElementById('online-inbox-list');if(!list)return;
-  if(!orders.length){list.innerHTML='<div class="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center"><div class="text-3xl mb-2">📭</div><div class="font-bold text-slate-700 text-sm">Belum ada pesanan pada filter ini</div><p class="text-xs text-slate-400 mt-1">Tekan Refresh untuk memeriksa pesanan terbaru.</p></div>';return;}
+  if(!orders.length){list.innerHTML='<div class="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center"><div class="text-3xl mb-2">📭</div><div class="font-bold text-slate-700 text-sm">Belum ada pesanan pada filter ini</div><p class="text-xs text-slate-400 mt-1">Inbox diperbarui otomatis setiap 3 detik.</p></div>';return;}
   list.innerHTML=orders.map(o=>{
+    const oid=onlineInboxEsc(o.orderId),locked=onlineOrderActionLocks.has(String(o.orderId));
     const items=(o.items||[]).map(i=>`<div class="flex justify-between gap-3 py-1 text-xs"><span class="min-w-0"><b>${Number(i.qty)||0}×</b> ${onlineInboxEsc(i.name)}</span><span class="shrink-0 font-mono">${onlineInboxMoney(i.lineTotal)}</span></div>`).join('');
     const s=String(o.orderStatus||'NEW').toUpperCase(),p=String(o.paymentStatus||'').toUpperCase();
-    const paymentAction=(p==='WAITING_VERIFICATION'||p==='WAITING_PAYMENT'||p==='UNPAID')?`<button onclick="setOnlineOrderPayment('${onlineInboxEsc(o.orderId)}','PAID')" class="rounded-lg bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white">Verifikasi / Tandai Lunas</button><button onclick="setOnlineOrderPayment('${onlineInboxEsc(o.orderId)}','REJECTED')" class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-bold text-rose-700">Tolak Pembayaran</button>`:'';
+    const btn=(label,onclick,style)=>`<button ${locked?'disabled':''} onclick="${onclick}" class="inbox-action-btn ${style} rounded-lg px-3 py-2 text-[11px] font-bold transition-all active:scale-95 disabled:opacity-60 disabled:cursor-wait">${locked?'<span class="inline-block h-3 w-3 mr-1 align-middle rounded-full border-2 border-current border-t-transparent animate-spin"></span>Memproses...':label}</button>`;
+    const paymentAction=(p==='WAITING_VERIFICATION'||p==='WAITING_PAYMENT'||p==='UNPAID')?btn('Verifikasi / Tandai Lunas',`setOnlineOrderPayment('${oid}','PAID')`,'bg-emerald-600 text-white')+btn('Tolak Pembayaran',`setOnlineOrderPayment('${oid}','REJECTED')`,'border border-rose-200 bg-rose-50 text-rose-700'):'';
     let actions='';
-    if(s==='NEW')actions=`<button onclick="setOnlineOrderStatus('${onlineInboxEsc(o.orderId)}','ACCEPTED')" class="rounded-lg bg-indigo-600 px-3 py-2 text-[11px] font-bold text-white">Terima Pesanan</button><button onclick="setOnlineOrderStatus('${onlineInboxEsc(o.orderId)}','REJECTED')" class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-bold text-rose-700">Tolak Pesanan</button>`;
-    else if(s==='ACCEPTED')actions=`<button onclick="setOnlineOrderStatus('${onlineInboxEsc(o.orderId)}','PREPARING')" class="rounded-lg bg-indigo-600 px-3 py-2 text-[11px] font-bold text-white">Mulai Diproses</button>`;
-    else if(s==='PREPARING')actions=`<button onclick="setOnlineOrderStatus('${onlineInboxEsc(o.orderId)}','READY')" class="rounded-lg bg-blue-600 px-3 py-2 text-[11px] font-bold text-white">Tandai Siap</button>`;
-    else if(s==='READY')actions=`<button onclick="setOnlineOrderStatus('${onlineInboxEsc(o.orderId)}','COMPLETED')" class="rounded-lg bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white">Selesaikan Order</button>`;
+    if(s==='NEW')actions=btn('Terima Pesanan',`setOnlineOrderStatus('${oid}','ACCEPTED')`,'bg-indigo-600 text-white')+btn('Tolak Pesanan',`setOnlineOrderStatus('${oid}','REJECTED')`,'border border-rose-200 bg-rose-50 text-rose-700');
+    else if(s==='ACCEPTED')actions=btn('Mulai Diproses',`setOnlineOrderStatus('${oid}','PREPARING')`,'bg-indigo-600 text-white');
+    else if(s==='PREPARING')actions=btn('Tandai Siap',`setOnlineOrderStatus('${oid}','READY')`,'bg-blue-600 text-white');
+    else if(s==='READY')actions=btn('Selesaikan Order',`setOnlineOrderStatus('${oid}','COMPLETED')`,'bg-emerald-600 text-white');
     const proof=o.proofUrl?`<a href="${onlineInboxEsc(o.proofUrl)}" target="_blank" rel="noopener" class="inline-flex rounded-lg border border-slate-200 px-3 py-2 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-50">Lihat Bukti Pembayaran</a>`:'';
-    const phone=String(o.phone||'').replace(/[^0-9]/g,'');
-    const wa=phone?`<a href="https://wa.me/${phone}" target="_blank" rel="noopener" class="text-emerald-700 underline">${onlineInboxEsc(o.phone)}</a>`:onlineInboxEsc(o.phone);
-    return `<article class="rounded-xl border border-slate-200 bg-white p-3 sm:p-4 shadow-sm">
-      <div class="flex flex-wrap items-start justify-between gap-2"><div><div class="font-bold text-sm text-slate-900">${onlineInboxEsc(o.orderId)}</div><div class="text-[10px] text-slate-400 mt-0.5">${onlineInboxDate(o.createdAt)}</div></div><div class="flex flex-wrap gap-1.5"><span class="rounded-full px-2.5 py-1 text-[10px] font-bold ${onlineInboxStatusClass(s)}">${onlineInboxStatusLabel(s)}</span><span class="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-700">${onlineInboxPaymentLabel(p)}</span></div></div>
-      <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs"><div><span class="text-slate-400">Pelanggan</span><div class="font-semibold text-slate-800">${onlineInboxEsc(o.customer||'-')}</div></div><div><span class="text-slate-400">WhatsApp</span><div class="font-semibold">${wa||'-'}</div></div><div><span class="text-slate-400">Jenis order</span><div class="font-semibold">${onlineInboxEsc(o.orderType||'-')}</div></div><div><span class="text-slate-400">Pembayaran</span><div class="font-semibold">${onlineInboxEsc(o.paymentMethod||'-')}</div></div></div>
-      ${o.address?`<div class="mt-2 rounded-lg bg-slate-50 p-2 text-xs"><span class="text-slate-400">Alamat delivery</span><div class="font-medium">${onlineInboxEsc(o.address)}</div></div>`:''}
-      <div class="mt-3 border-t border-slate-100 pt-2"><div class="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">Detail pesanan</div>${items||'<div class="text-xs text-slate-400">Detail menu tidak ditemukan.</div>'}</div>
-      ${o.notes?`<div class="mt-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-800"><b>Catatan:</b> ${onlineInboxEsc(o.notes)}</div>`:''}
-      <div class="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3"><div class="text-xs leading-5"><div class="text-slate-500">Subtotal ${onlineInboxMoney(o.subtotal)} · Ongkir ${onlineInboxMoney(o.deliveryFee)}</div><div class="text-base font-extrabold text-slate-900">Total ${onlineInboxMoney(o.total)}</div></div><div class="flex flex-wrap gap-2">${proof}${paymentAction}${actions}</div></div>
-    </article>`;
-  }).join('');
+    const phone=String(o.phone||'').replace(/[^0-9]/g,'');const wa=phone?`<a href="https://wa.me/${phone}" target="_blank" rel="noopener" class="text-emerald-700 underline">${onlineInboxEsc(o.phone)}</a>`:onlineInboxEsc(o.phone);
+    return `<article class="rounded-xl border border-slate-200 bg-white p-3 sm:p-4 shadow-sm"><div class="flex flex-wrap items-start justify-between gap-2"><div><div class="font-bold text-sm text-slate-900">${oid}</div><div class="text-[10px] text-slate-400 mt-0.5">${onlineInboxDate(o.createdAt)}</div></div><div class="flex flex-wrap gap-1.5"><span class="rounded-full px-2.5 py-1 text-[10px] font-bold ${onlineInboxStatusClass(s)}">${onlineInboxStatusLabel(s)}</span><span class="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-700">${onlineInboxPaymentLabel(p)}</span></div></div><div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs"><div><span class="text-slate-400">Pelanggan</span><div class="font-semibold text-slate-800">${onlineInboxEsc(o.customer||'-')}</div></div><div><span class="text-slate-400">WhatsApp</span><div class="font-semibold">${wa||'-'}</div></div><div><span class="text-slate-400">Jenis order</span><div class="font-semibold">${onlineInboxEsc(o.orderType||'-')}</div></div><div><span class="text-slate-400">Pembayaran</span><div class="font-semibold">${onlineInboxEsc(o.paymentMethod||'-')}</div></div></div>${o.address?`<div class="mt-2 rounded-lg bg-slate-50 p-2 text-xs"><span class="text-slate-400">Alamat delivery</span><div class="font-medium">${onlineInboxEsc(o.address)}</div></div>`:''}<div class="mt-3 border-t border-slate-100 pt-2"><div class="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">Detail pesanan</div>${items||'<div class="text-xs text-slate-400">Detail menu tidak ditemukan.</div>'}</div>${o.notes?`<div class="mt-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-800"><b>Catatan:</b> ${onlineInboxEsc(o.notes)}</div>`:''}<div class="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3"><div class="text-xs leading-5"><div class="text-slate-500">Subtotal ${onlineInboxMoney(o.subtotal)} · Ongkir ${onlineInboxMoney(o.deliveryFee)}</div><div class="text-base font-extrabold text-slate-900">Total ${onlineInboxMoney(o.total)}</div></div><div class="flex flex-wrap gap-2">${proof}${paymentAction}${actions}</div></div></article>`;
+  }).join('');if(window.lucide)lucide.createIcons();
+}
+async function runOnlineOrderAction(orderId,action,payload){
+  const key=String(orderId);if(onlineOrderActionLocks.has(key))return false;onlineOrderActionLocks.add(key);renderOnlineOrderInbox(onlineInboxCache);let succeeded=false;
+  try{const result=await posApi({action,username:currentPOSAccount.username,orderId,...payload});if(!result||result.status!=='success')throw new Error(result?.message||'Aksi belum dikonfirmasi server.');succeeded=true;notifyPOS(action==='updateOnlineOrderStatus'?'Status pesanan diperbarui.':'Status pembayaran diperbarui.');}
+  catch(e){notifyPOS(e.message,true);}
+  finally{onlineOrderActionLocks.delete(key);await refreshOnlineOrderInbox();}
+  return succeeded;
 }
 async function setOnlineOrderStatus(orderId,orderStatus){
   if(!currentPOSAccount?.username)return;
-  try{await posApi({action:'updateOnlineOrderStatus',username:currentPOSAccount.username,orderId,orderStatus});notifyPOS('Status pesanan diperbarui: '+onlineInboxStatusLabel(orderStatus));await refreshOnlineOrderInbox();}
-  catch(e){notifyPOS(e.message,true);}
+  const order=onlineInboxCache.find(o=>String(o.orderId)===String(orderId));
+  if(String(orderStatus).toUpperCase()==='ACCEPTED'){
+    if(!order){notifyPOS('Data pesanan tidak ditemukan di Inbox. Refresh lalu coba kembali.',true);return;}
+    if(getOnlineAcceptedOrders().includes(String(orderId))||posCart.some(x=>String(x.onlineOrderId||'')===String(orderId))){notifyPOS('Pesanan ini sudah pernah dimasukkan ke keranjang POS.',true);return;}
+    if(!Array.isArray(order.items)||!order.items.length){notifyPOS('Detail item pesanan kosong. Pesanan belum diterima.',true);return;}
+  }
+  const ok=await runOnlineOrderAction(orderId,'updateOnlineOrderStatus',{orderStatus});
+  if(!ok)return;
+  if(String(orderStatus).toUpperCase()==='ACCEPTED'&&order){
+    try{addOnlineOrderToPOSCart(order);}
+    catch(e){notifyPOS('Status pesanan sudah diterima, tetapi item gagal masuk keranjang: '+e.message,true);}
+  }
 }
-async function setOnlineOrderPayment(orderId,paymentStatus){
-  if(!currentPOSAccount?.username)return;
-  const message=paymentStatus==='PAID'?'Pastikan pembayaran sudah benar-benar diterima. Tandai pembayaran sebagai LUNAS?':'Tolak bukti/status pembayaran ini?';
-  if(!confirm(message))return;
-  try{await posApi({action:'updateOnlineOrderPayment',username:currentPOSAccount.username,orderId,paymentStatus});notifyPOS('Status pembayaran diperbarui: '+onlineInboxPaymentLabel(paymentStatus));await refreshOnlineOrderInbox();}
-  catch(e){notifyPOS(e.message,true);}
-}
-// ================= NOTIFIKASI SUARA ONLINE ORDER (PERANGKAT KASIR) =================
-let onlineOrderSoundEnabled = false;
+async function setOnlineOrderPayment(orderId,paymentStatus){if(!currentPOSAccount?.username)return;const key=String(orderId);if(onlineOrderActionLocks.has(key))return;const message=paymentStatus==='PAID'?'Pastikan pembayaran sudah benar-benar diterima. Tandai pembayaran sebagai LUNAS?':'Tolak bukti/status pembayaran ini?';if(!confirm(message))return;return runOnlineOrderAction(orderId,'updateOnlineOrderPayment',{paymentStatus});}
+// Notifikasi suara order baru: polling berjalan selama akun POS login, termasuk saat Inbox ditutup.
+let onlineOrderSoundEnabled = localStorage.getItem('ae_pos_online_order_sound') === '1';
 let onlineOrderAudioContext = null;
-let onlineOrderKnownIds = new Set();
-let onlineOrderBaselineReady = false;
-let onlineOrderPollingBusy = false;
+let onlineOrderSeenIds = new Set();
+let onlineOrderSeenUsername = '';
+let onlineOrderNotificationPollBusy = false;
 function updateOnlineOrderSoundButton(){
-  const b=document.getElementById('online-inbox-sound-btn'); if(!b)return;
-  b.innerHTML=onlineOrderSoundEnabled?'<i data-lucide="volume-2" class="inline w-3.5 h-3.5 mr-1"></i><span>Suara Aktif</span>':'<i data-lucide="volume-x" class="inline w-3.5 h-3.5 mr-1"></i><span>Aktifkan Suara</span>';
-  b.className=onlineOrderSoundEnabled?'rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100':'rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100';
+  const btn=document.getElementById('online-order-sound-btn'),icon=document.getElementById('online-order-sound-icon');
+  if(!btn||!icon)return;
+  icon.setAttribute('data-lucide',onlineOrderSoundEnabled?'volume-2':'volume-x');
+  btn.title=onlineOrderSoundEnabled?'Suara notifikasi order aktif':'Klik untuk mengaktifkan suara notifikasi order';
+  btn.setAttribute('aria-label',btn.title);
+  btn.classList.toggle('bg-emerald-50',onlineOrderSoundEnabled);btn.classList.toggle('border-emerald-200',onlineOrderSoundEnabled);btn.classList.toggle('text-emerald-700',onlineOrderSoundEnabled);
+  btn.classList.toggle('bg-slate-100',!onlineOrderSoundEnabled);btn.classList.toggle('border-slate-200',!onlineOrderSoundEnabled);btn.classList.toggle('text-slate-600',!onlineOrderSoundEnabled);
   if(window.lucide)lucide.createIcons();
 }
-function playOnlineOrderChime(){
-  if(!onlineOrderSoundEnabled)return;
+function playOnlineOrderNotificationSound(){
+  if(!onlineOrderSoundEnabled||!onlineOrderAudioContext)return;
   try{
-    const Ctx=window.AudioContext||window.webkitAudioContext;if(!Ctx)return;
-    onlineOrderAudioContext=onlineOrderAudioContext||new Ctx();
-    if(onlineOrderAudioContext.state==='suspended')onlineOrderAudioContext.resume();
-    const ctx=onlineOrderAudioContext;
-    [0,0.28,0.56].forEach((delay,i)=>{
-      const osc=ctx.createOscillator(),gain=ctx.createGain();
-      osc.type='sine';osc.frequency.value=[880,1175,988][i];
-      gain.gain.setValueAtTime(0.0001,ctx.currentTime+delay);
-      gain.gain.exponentialRampToValueAtTime(0.22,ctx.currentTime+delay+0.025);
-      gain.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+delay+0.22);
-      osc.connect(gain);gain.connect(ctx.destination);osc.start(ctx.currentTime+delay);osc.stop(ctx.currentTime+delay+0.24);
-    });
-  }catch(e){console.warn('Audio notifikasi tidak dapat diputar:',e);}
+    const ctx=onlineOrderAudioContext; if(ctx.state==='suspended')ctx.resume();
+    const now=ctx.currentTime;
+    [880,1175].forEach((freq,index)=>{const osc=ctx.createOscillator(),gain=ctx.createGain();osc.type='sine';osc.frequency.setValueAtTime(freq,now+index*.16);gain.gain.setValueAtTime(.0001,now+index*.16);gain.gain.exponentialRampToValueAtTime(.22,now+index*.16+.025);gain.gain.exponentialRampToValueAtTime(.0001,now+index*.16+.22);osc.connect(gain);gain.connect(ctx.destination);osc.start(now+index*.16);osc.stop(now+index*.16+.24);});
+  }catch(e){console.warn('Suara notifikasi tidak dapat diputar:',e);}
 }
-function toggleOnlineOrderSound(){
-  onlineOrderSoundEnabled=!onlineOrderSoundEnabled;
-  if(onlineOrderSoundEnabled){
-    try{const Ctx=window.AudioContext||window.webkitAudioContext;if(Ctx){onlineOrderAudioContext=onlineOrderAudioContext||new Ctx();onlineOrderAudioContext.resume();}}catch(e){}
-    playOnlineOrderChime();notifyPOS('Notifikasi suara pesanan online aktif di perangkat ini.');
-  }else notifyPOS('Notifikasi suara pesanan online dinonaktifkan.');
-  updateOnlineOrderSoundButton();
-}
-function showNewOnlineOrderAlert(order){
-  const old=document.getElementById('online-order-new-alert');if(old)old.remove();
-  const el=document.createElement('div');el.id='online-order-new-alert';
-  el.className='fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/55 backdrop-blur-sm p-4';
-  el.innerHTML=`<div class="w-full max-w-sm overflow-hidden rounded-3xl bg-white shadow-2xl border border-emerald-100"><div class="bg-emerald-600 px-5 py-4 text-white"><div class="flex items-center gap-2 text-xs font-bold tracking-widest"><span class="inline-block h-2 w-2 rounded-full bg-white animate-ping"></span> ONLINE ORDER</div><div class="mt-2 text-2xl font-extrabold">PESANAN BARU!</div><div class="mt-1 text-xs text-emerald-100">Ada pesanan pelanggan yang masuk</div></div><div class="p-5"><div class="text-xs text-slate-400">Nomor Pesanan</div><div class="mb-4 break-all text-lg font-extrabold text-slate-900">${onlineInboxEsc(order.orderId||'-')}</div><div class="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3 text-sm"><div><div class="text-[10px] text-slate-400">Pelanggan</div><b>${onlineInboxEsc(order.customer||'-')}</b></div><div><div class="text-[10px] text-slate-400">Jumlah Menu</div><b>${(order.items||[]).reduce((n,x)=>n+(Number(x.qty)||0),0)} item</b></div><div class="col-span-2"><div class="text-[10px] text-slate-400">Total Pesanan</div><b class="text-lg text-emerald-700">${onlineInboxMoney(order.total)}</b></div></div><div class="mt-4 flex gap-2"><button type="button" id="online-order-alert-dismiss" class="flex-1 rounded-xl border border-slate-200 px-3 py-3 text-xs font-bold text-slate-600">Tutup</button><button type="button" id="online-order-alert-open" class="flex-1 rounded-xl bg-emerald-600 px-3 py-3 text-xs font-bold text-white">Buka Pesanan</button></div></div></div>`;
-  document.body.appendChild(el);
-  el.querySelector('#online-order-alert-dismiss').onclick=()=>el.remove();
-  el.querySelector('#online-order-alert-open').onclick=()=>{el.remove();openOnlineOrderInbox();};
-  playOnlineOrderChime();
-}
-async function pollOnlineOrderNotifications(){
-  if(!currentPOSAccount?.username||onlineOrderPollingBusy||document.hidden)return;
-  onlineOrderPollingBusy=true;
+async function toggleOnlineOrderSound(){
   try{
-    const data=await posApi({action:'getOnlineOrderInbox',username:currentPOSAccount.username,statusFilter:'ALL',limit:60});
-    if(data.status!=='success')return;
+    const AudioCtx=window.AudioContext||window.webkitAudioContext;
+    if(!AudioCtx){notifyPOS('Browser ini belum mendukung suara notifikasi.',true);return;}
+    if(!onlineOrderAudioContext)onlineOrderAudioContext=new AudioCtx();
+    await onlineOrderAudioContext.resume();
+    onlineOrderSoundEnabled=!onlineOrderSoundEnabled;
+    localStorage.setItem('ae_pos_online_order_sound',onlineOrderSoundEnabled?'1':'0');
+    updateOnlineOrderSoundButton();
+    if(onlineOrderSoundEnabled){playOnlineOrderNotificationSound();notifyPOS('Suara notifikasi order aktif.');}
+    else notifyPOS('Suara notifikasi order dinonaktifkan.');
+  }catch(e){notifyPOS('Gagal mengaktifkan suara. Coba klik kembali.',true);}
+}
+async function pollIncomingOnlineOrders(){
+  const username=String(currentPOSAccount?.username||'').trim();
+  if(!username||onlineOrderNotificationPollBusy)return;
+  if(onlineOrderSeenUsername!==username){onlineOrderSeenUsername=username;onlineOrderSeenIds=new Set();}
+  onlineOrderNotificationPollBusy=true;
+  try{
+    const data=await posApi({action:'getOnlineOrderInbox',username,statusFilter:'ALL',limit:60});
+    if(!data||data.status!=='success')return;
     const orders=Array.isArray(data.orders)?data.orders:[];
     updateOnlineInboxBadge(data.pendingCount||0);
-    const newOrders=orders.filter(o=>String(o.orderStatus||'NEW').toUpperCase()==='NEW'&&o.orderId);
-    if(!onlineOrderBaselineReady){onlineOrderKnownIds=new Set(newOrders.map(o=>String(o.orderId)));onlineOrderBaselineReady=true;return;}
-    const arrived=newOrders.filter(o=>!onlineOrderKnownIds.has(String(o.orderId)));
-    newOrders.forEach(o=>onlineOrderKnownIds.add(String(o.orderId)));
-    if(arrived.length){
-      arrived.forEach((o,i)=>{if(i===0)showNewOnlineOrderAlert(o);});
-      if(arrived.length>1)notifyPOS(arrived.length+' pesanan online baru masuk.');
-    }
-  }catch(e){/* polling notifikasi tidak boleh mengganggu transaksi POS */}
-  finally{onlineOrderPollingBusy=false;}
+    // Poll pertama hanya membangun baseline agar order lama tidak membunyikan alarm.
+    if(onlineOrderSeenIds.size===0){orders.forEach(o=>{if(o.orderId)onlineOrderSeenIds.add(String(o.orderId));});return;}
+    let hasNewOrder=false;
+    orders.forEach(o=>{
+      const id=String(o.orderId||'');if(!id)return;
+      if(!onlineOrderSeenIds.has(id)){
+        onlineOrderSeenIds.add(id);
+        if(String(o.orderStatus||'NEW').toUpperCase()==='NEW')hasNewOrder=true;
+      }
+    });
+    if(onlineOrderSeenIds.size>500)onlineOrderSeenIds=new Set(Array.from(onlineOrderSeenIds).slice(-300));
+    if(hasNewOrder){playOnlineOrderNotificationSound();const inbox=document.getElementById('online-order-inbox-modal');if(inbox?.classList.contains('hidden')){const btn=document.getElementById('header-online-inbox-btn');if(btn){btn.classList.add('ring-2','ring-amber-400');setTimeout(()=>btn.classList.remove('ring-2','ring-amber-400'),1800);}}}
+  }catch(e){console.warn('Polling Online Order gagal:',e);}
+  finally{onlineOrderNotificationPollBusy=false;}
 }
-function startOnlineOrderNotificationPolling(){
-  if(onlineInboxPollHandle)clearInterval(onlineInboxPollHandle);
-  onlineOrderBaselineReady=false;onlineOrderKnownIds=new Set();
-  if(!currentPOSAccount?.username)return;
-  pollOnlineOrderNotifications();
-  onlineInboxPollHandle=setInterval(pollOnlineOrderNotifications,10000);
-}
-// Poll hanya pada sesi POS kasir yang sedang login; baseline awal mencegah bunyi untuk order lama.
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(startOnlineOrderNotificationPolling,1500));
-else setTimeout(startOnlineOrderNotificationPolling,1500);
-
+updateOnlineOrderSoundButton();
+if(!onlineInboxPollHandle)onlineInboxPollHandle=setInterval(pollIncomingOnlineOrders,5000);
 </script>
 
 </body>
