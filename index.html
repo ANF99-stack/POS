@@ -1155,6 +1155,27 @@
     <!-- ================= NOTIFIKASI TOAST ================= -->
     <div id="integration-message" role="status" class="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:max-w-md z-[99] hidden rounded-xl px-4 py-3 text-xs sm:text-sm font-semibold shadow-xl"></div>
 
+    <!-- ================= POPUP ONLINE ORDER BARU ================= -->
+    <div id="online-order-alert-modal" class="fixed inset-0 z-[110] hidden items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4" role="alertdialog" aria-modal="true" aria-labelledby="online-order-alert-title">
+      <div class="w-full max-w-sm overflow-hidden rounded-3xl bg-white shadow-2xl border border-emerald-200">
+        <div class="bg-emerald-600 px-5 py-5 text-center text-white">
+          <div class="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-white/20 text-3xl">🔔</div>
+          <h2 id="online-order-alert-title" class="text-lg font-extrabold">PESANAN ONLINE BARU!</h2>
+          <p class="mt-1 text-xs text-emerald-50">Ada pesanan baru masuk ke outlet Anda</p>
+        </div>
+        <div class="space-y-2 p-5">
+          <div class="rounded-xl bg-slate-50 p-3"><div class="text-[10px] font-semibold uppercase text-slate-400">Nomor Pesanan</div><div id="online-order-alert-id" class="mt-1 font-mono text-base font-extrabold text-slate-900">-</div></div>
+          <div class="flex items-center justify-between gap-3 text-sm"><span class="text-slate-500">Pelanggan</span><b id="online-order-alert-customer" class="text-right text-slate-800">-</b></div>
+          <div class="flex items-center justify-between gap-3 text-sm"><span class="text-slate-500">Total Pesanan</span><b id="online-order-alert-total" class="text-right text-emerald-700">-</b></div>
+          <div id="online-order-alert-multiple" class="hidden rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800"></div>
+          <div class="grid grid-cols-2 gap-2 pt-2">
+            <button type="button" onclick="closeOnlineOrderAlert()" class="rounded-xl border border-slate-200 px-3 py-3 text-xs font-bold text-slate-600">Nanti</button>
+            <button type="button" onclick="openInboxFromOnlineOrderAlert()" class="rounded-xl bg-emerald-600 px-3 py-3 text-xs font-bold text-white shadow-lg shadow-emerald-600/20">BUKA PESANAN</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ================= JAVASCRIPT UTAMA (STANDALONE SINGLE HTML) ================= -->
     <script>
     // 1. Integrasi Google Apps Script
@@ -3358,6 +3379,23 @@ async function toggleOnlineOrderSound(){
     else notifyPOS('Suara notifikasi order dinonaktifkan.');
   }catch(e){notifyPOS('Gagal mengaktifkan suara. Coba klik kembali.',true);}
 }
+let onlineOrderAlertQueue = [];
+function showOnlineOrderAlert(orders){
+  const fresh=(Array.isArray(orders)?orders:[]).filter(o=>o&&String(o.orderStatus||'NEW').toUpperCase()==='NEW');
+  if(!fresh.length)return;
+  onlineOrderAlertQueue=fresh;
+  const order=fresh[0];
+  const modal=document.getElementById('online-order-alert-modal');
+  if(!modal)return;
+  document.getElementById('online-order-alert-id').textContent=String(order.orderId||'-');
+  document.getElementById('online-order-alert-customer').textContent=String(order.customer||'-');
+  document.getElementById('online-order-alert-total').textContent=onlineInboxMoney(order.total||0);
+  const multiple=document.getElementById('online-order-alert-multiple');
+  if(multiple){multiple.textContent=fresh.length>1?`Ada ${fresh.length} pesanan baru masuk. Buka Inbox untuk melihat semuanya.`:'';multiple.classList.toggle('hidden',fresh.length<2);}
+  modal.classList.remove('hidden');modal.classList.add('flex');
+}
+function closeOnlineOrderAlert(){const modal=document.getElementById('online-order-alert-modal');if(modal){modal.classList.add('hidden');modal.classList.remove('flex');}}
+async function openInboxFromOnlineOrderAlert(){closeOnlineOrderAlert();await openOnlineOrderInbox();}
 async function pollIncomingOnlineOrders(){
   const username=String(currentPOSAccount?.username||'').trim();
   if(!username||onlineOrderNotificationPollBusy)return;
@@ -3370,16 +3408,21 @@ async function pollIncomingOnlineOrders(){
     updateOnlineInboxBadge(data.pendingCount||0);
     // Poll pertama hanya membangun baseline agar order lama tidak membunyikan alarm.
     if(onlineOrderSeenIds.size===0){orders.forEach(o=>{if(o.orderId)onlineOrderSeenIds.add(String(o.orderId));});return;}
-    let hasNewOrder=false;
+    const newOrders=[];
     orders.forEach(o=>{
       const id=String(o.orderId||'');if(!id)return;
       if(!onlineOrderSeenIds.has(id)){
         onlineOrderSeenIds.add(id);
-        if(String(o.orderStatus||'NEW').toUpperCase()==='NEW')hasNewOrder=true;
+        if(String(o.orderStatus||'NEW').toUpperCase()==='NEW')newOrders.push(o);
       }
     });
     if(onlineOrderSeenIds.size>500)onlineOrderSeenIds=new Set(Array.from(onlineOrderSeenIds).slice(-300));
-    if(hasNewOrder){playOnlineOrderNotificationSound();const inbox=document.getElementById('online-order-inbox-modal');if(inbox?.classList.contains('hidden')){const btn=document.getElementById('header-online-inbox-btn');if(btn){btn.classList.add('ring-2','ring-amber-400');setTimeout(()=>btn.classList.remove('ring-2','ring-amber-400'),1800);}}}
+    if(newOrders.length){
+      playOnlineOrderNotificationSound();
+      showOnlineOrderAlert(newOrders);
+      const btn=document.getElementById('header-online-inbox-btn');
+      if(btn){btn.classList.add('ring-2','ring-amber-400');setTimeout(()=>btn.classList.remove('ring-2','ring-amber-400'),2500);}
+    }
   }catch(e){console.warn('Polling Online Order gagal:',e);}
   finally{onlineOrderNotificationPollBusy=false;}
 }
